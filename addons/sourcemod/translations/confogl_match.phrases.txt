@@ -1,0 +1,47 @@
+"Phrases"
+{
+	"TAG"
+	{
+		"en"			"<{green}Confogl Match{default}> "
+	}
+
+	"CATEGORY_MENU_TITLE"
+	{
+		"#format"		"{1:s}"
+		"en"			"Select category:\n(Active match: {1})"
+	}
+
+	"CONFIG_NONE"
+	{
+		"en"			"None"
+	}
+
+	"CONFIG_UNKNOWN"
+	{
+		"en"			"Unknown"
+	}
+
+	"CONFIG_MENU_TITLE"
+	{
+		"#format"		"{1:s},{2:s}"
+		"en"			"Select a match from category {1}:\n(Active match: {2})"
+	}
+
+	"VOTE_COULDOWN"
+	{
+		"#format"		"{1:d}"
+		"en"			"A vote cannot be called at this moment, try again in a {1} second"
+	}
+
+	"VOTE_MATCH_START"
+	{
+		"#format"		"{1:s}"
+		"en"			"Load config {1}"
+	}
+
+	"VOTE_MATCH_END"
+	{
+		"#format"		"{1:s}"
+		"en"			"Unload config {1}"
+	}
+}
