@@ -1,0 +1,63 @@
+"Phrases"
+{
+	"TAG"
+	{
+		"en"			"<{green}Config{default}> "
+	}
+
+	"CATEGORY_MENU_TITLE"
+	{
+		"#format"		"{1:s}"
+		"en"			"Select category:\n(Active match: {1})"
+	}
+
+	"CONFIG_UNDEFINED"
+	{
+		"en"			"Undefined"
+	}
+
+	"CONFIG_NOT_LOADED"
+	{
+		"en"			"Config not loaded"
+	}
+
+	"MENU_MAIN_TITLE"
+	{
+		"en"			"Select category:"
+	}
+
+	"MENU_MAIN_TITLE_EX"
+	{
+		"#format"		"{1:s}"
+		"en"			"Select category:\n(Active config: {1})"
+	}
+
+	"MENU_CATEGORY_TITLE"
+	{
+		"en"			"Select a config from category:"
+	}
+
+	"MENU_CATEGORY_TITLE_EX"
+	{
+		"#format"		"{1:s}"
+		"en"			"Select a config from category:\n(Active config: {1})"
+	}
+
+	"VOTE_COULDOWN"
+	{
+		"#format"		"{1:d}"
+		"en"			"A vote cannot be called at this moment, try again in a {1} second"
+	}
+
+	"VOTE_MATCH_START"
+	{
+		"#format"		"{1:s}"
+		"en"			"Load config: {1}"
+	}
+
+	"VOTE_MATCH_END"
+	{
+		"#format"		"{1:s}"
+		"en"			"Unload config: {1}"
+	}
+}

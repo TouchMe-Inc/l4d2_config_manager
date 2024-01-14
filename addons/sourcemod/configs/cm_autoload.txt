@@ -1,0 +1,17 @@
+"GameModes"
+{
+	"default"
+	{
+		"exec" "touchme_versus_t2"
+	}
+
+	"versus"
+	{
+		"exec" "touchme_versus_t2"
+	}
+
+	"mutation12"
+	{
+		"exec" "touchme_versus_t2"
+	}
+}

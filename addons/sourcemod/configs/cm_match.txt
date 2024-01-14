@@ -1,0 +1,9 @@
+"ConfigList"
+{
+	"Custom Configs"
+	{
+		"touchme_versus_t2" {
+			"name" "Versus | T2"
+		}
+	}
+}
