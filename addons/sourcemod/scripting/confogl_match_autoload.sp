@@ -178,8 +178,6 @@ Action Event_PlayerDisconnect(Event event, const char[] sName, bool bDontBroadca
 		return Plugin_Continue;
 	}
 
-	LogMessage("Event_PlayerDisconnect");
-
 	g_bAllBotGameOldAValue = GetConVarBool(g_cvAllBotGame);
 	SetConVarBool(g_cvAllBotGame, true, .notify = false);
 
@@ -196,12 +194,8 @@ Action Timer_LoadDefaultConfig(Handle hTimer)
 {
 	char sConfig[64];
 
-	LogMessage("Timer_LoadDefaultConfig");
-
-	if (GetTrieString(g_hGamemodeConfig, "default", sConfig, sizeof(sConfig)))
-	{
+	if (GetTrieString(g_hGamemodeConfig, "default", sConfig, sizeof(sConfig))) {
 		Confogl_LoadConfig(sConfig);
-		LogMessage("Confogl_LoadConfig(%s)", sConfig);
 	}
 
 	SetConVarBool(g_cvAllBotGame, g_bAllBotGameOldAValue, .notify = false);
@@ -223,7 +217,6 @@ bool IsEmptyServer(int iIgnoreClient = -1)
 
 	return true;
 }
-
 
 void RestartMap()
 {
