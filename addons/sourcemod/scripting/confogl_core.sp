@@ -48,6 +48,8 @@ char g_cDirSeparator;
 
 char g_sConfigName[CONFIG_NAME_MAX];
 
+bool g_bConVarChange = false;
+
 bool g_bChangeLevelAvailable = false;
 
 
@@ -235,11 +237,15 @@ Action Cmd_ResetCvars(int iArgs)
 
 public void OnConVarChanged(ConVar convar, const char[] sOldValue, const char[] sNewValue)
 {
+	if (g_bConVarChange) {
+		return;
+	}
+
 	char sConVarName[CVAR_NAME_MAX]; GetConVarName(convar, sConVarName, sizeof(sConVarName));
 
-	UnhookConVarChange(convar, OnConVarChanged);
+	g_bConVarChange = true;
 	SetConVarStringSilence(convar, sOldValue);
-	HookConVarChange(convar, OnConVarChanged);
+	g_bConVarChange = false;
 }
 
 bool IsConfigLoaded() {
@@ -327,10 +333,10 @@ bool UnloadConfig()
 
 	ServerCommand("exec %s", sConfigPath[strlen(g_sConfoglPath)]);
 
+	g_sConfigName[0] = '\0';
+
 	UnloadPlugins();
 	ResetConVars();
-
-	g_sConfigName[0] = '\0';
 
 	ExecForwardWithoutParams(g_hFwdOnUnloadConfig);
 

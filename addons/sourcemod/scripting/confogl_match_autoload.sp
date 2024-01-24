@@ -24,7 +24,15 @@ public Plugin myinfo =
 #define CONFIG_PATH        "configs/confogl_match_autoload.txt"
 
 
-bool g_bLoopFixed = false; 
+bool
+	g_bInit = false,
+	g_bLoopFixed = false
+;
+
+char
+	g_sNewGamemode[32],
+	g_sDifficulty[32]
+;
 
 Handle
 	g_hGamemodes = null,
@@ -33,6 +41,7 @@ Handle
 
 ConVar
 	g_cvGameMode = null,
+	g_cvDifficulty = null,
 	g_cvAllBotGame = null
 ;
 
@@ -89,10 +98,48 @@ public void OnPluginStart()
 	LoadGamemodes(g_hGamemodes = CreateKeyValues("Gamemodes"));
 	FillGamemodeConfig(g_hGamemodes, g_hGamemodeConfig = CreateTrie());
 
-	g_cvGameMode = FindConVar("mp_gamemode");
 	g_cvAllBotGame = FindConVar("sb_all_bot_game");
+	HookConVarChange((g_cvDifficulty = FindConVar("z_difficulty")), ConVarChange_Difficulty);
+	HookConVarChange((g_cvGameMode = FindConVar("mp_gamemode")), OnConVarChange_GameMode);
 
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
+
+	g_bInit = false;
+}
+
+public void ConVarChange_Difficulty(ConVar convar, const char[] sOldGamemode, const char[] sGamemode)
+{
+	strcopy(g_sDifficulty, sizeof(g_sDifficulty), sGamemode);
+}
+
+public void OnConVarChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] sGamemode)
+{
+	if (Confogl_IsConfigLoaded() && !g_bLoopFixed)
+	{
+		g_bLoopFixed = true;
+
+		char sConfig[64]; Confogl_GetConfigName(sConfig, sizeof(sConfig));
+
+		char sGamemodeConfig[64];
+
+		bool bNeedConfig = GetTrieString(g_hGamemodeConfig, sGamemode, sGamemodeConfig, sizeof(sGamemodeConfig));
+
+		if (!bNeedConfig || !StrEqual(sGamemodeConfig, sConfig))
+		{
+			strcopy(g_sNewGamemode, sizeof(g_sNewGamemode), sGamemode);
+			Confogl_UnloadConfig();
+			CreateTimer(1.0, Timer_RestartMap);
+		}
+	}
+}
+
+Action Timer_RestartMap(Handle hTimer)
+{
+	SetConVarString(g_cvGameMode, g_sNewGamemode);
+	SetConVarString(g_cvDifficulty, g_sDifficulty);
+	RestartMap();
+
+	return Plugin_Stop;
 }
 
 void LoadGamemodes(Handle hGamemodes)
@@ -127,6 +174,11 @@ void FillGamemodeConfig(Handle hGamemodes, Handle hGamemodeConfig)
 
 public void OnAllPluginsLoaded()
 {
+	if (g_bInit) {
+		return;
+	}
+
+	g_bInit = true;
 	g_bLoopFixed = false;
 	g_bChangeLevelAvailable = LibraryExists(LIB_CHANGELEVEL);
 
@@ -138,33 +190,6 @@ public void OnAllPluginsLoaded()
 			Confogl_LoadConfig(sConfig);
 		}
 	}
-}
-
-public void OnConfigsExecuted()
-{
-	if (Confogl_IsConfigLoaded() && !g_bLoopFixed)
-	{
-		g_bLoopFixed = true;
-
-		char sGameMode[16]; GetConVarString(g_cvGameMode, sGameMode, sizeof(sGameMode));
-		char sConfig[64]; Confogl_GetConfigName(sConfig, sizeof(sConfig));
-
-		char sGamemodeConfig[64];
-
-		if (!GetTrieString(g_hGamemodeConfig, sGameMode, sGamemodeConfig, sizeof(sGamemodeConfig))
-		|| !StrEqual(sGamemodeConfig, sConfig))
-		{
-			Confogl_UnloadConfig();
-			CreateTimer(1.0, Timer_RestartMap, .flags = TIMER_FLAG_NO_MAPCHANGE);
-		}
-	}
-}
-
-Action Timer_RestartMap(Handle hTimer)
-{
-	RestartMap();
-
-	return Plugin_Stop;
 }
 
 Action Event_PlayerDisconnect(Event event, const char[] sName, bool bDontBroadcast)
@@ -185,7 +210,7 @@ Action Event_PlayerDisconnect(Event event, const char[] sName, bool bDontBroadca
 		Confogl_UnloadConfig();
 	}
 
-	CreateTimer(1.0, Timer_LoadDefaultConfig, .flags = TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(1.0, Timer_LoadDefaultConfig);
 
 	return Plugin_Continue;
 }
@@ -198,13 +223,15 @@ Action Timer_LoadDefaultConfig(Handle hTimer)
 		Confogl_LoadConfig(sConfig);
 	}
 
-	SetConVarBool(g_cvAllBotGame, g_bAllBotGameOldAValue, .notify = false);
-
-	g_bLoopFixed = false;
-
 	return Plugin_Stop;
 }
 
+public void Confogl_OnLoadConfig()
+{
+	g_bLoopFixed = false;
+
+	SetConVarBool(g_cvAllBotGame, g_bAllBotGameOldAValue, .notify = false);
+}
 
 bool IsEmptyServer(int iIgnoreClient = -1)
 {
