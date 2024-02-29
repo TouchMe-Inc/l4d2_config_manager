@@ -1,1 +1,2 @@
-# l4d2_confogl
+# About confogl
+The plugin allows you to run configs located in the 'configs/confogl' folder.
