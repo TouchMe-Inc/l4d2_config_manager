@@ -336,24 +336,13 @@ Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, 
 
 			hVote.DisplayPass();
 
-			if (Confogl_IsConfigLoaded()) {
-				Confogl_UnloadConfig();
-			}
-
-			CreateTimer(1.0, Timer_LoadConfig, .flags = TIMER_FLAG_NO_MAPCHANGE);
+			Confogl_LoadConfig(g_sConfigName);
 		}
 
 		case VoteAction_End: hVote.Close();
 	}
 
 	return Plugin_Continue;
-}
-
-Action Timer_LoadConfig(Handle hTimer)
-{
-	Confogl_LoadConfig(g_sConfigName);
-
-	return Plugin_Stop;
 }
 
 void RunVoteMatchEnd(int iClient)

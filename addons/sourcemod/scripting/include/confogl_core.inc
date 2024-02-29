@@ -5,8 +5,8 @@
 
 native bool Confogl_IsConfigLoaded();
 native void Confogl_GetConfigName(char[] sConfigName, int iLength);
-native bool Confogl_LoadConfig(const char[] sConfigName);
-native bool Confogl_UnloadConfig();
+native void Confogl_LoadConfig(const char[] sConfigName);
+native void Confogl_UnloadConfig();
 
 public SharedPlugin __pl_confogl_core =
 {
@@ -23,6 +23,7 @@ public SharedPlugin __pl_confogl_core =
 public void __pl_confogl_SetNTVOptional()
 {
 	MarkNativeAsOptional("Confogl_IsConfigLoaded");
+	MarkNativeAsOptional("Confogl_GetConfigName");
 	MarkNativeAsOptional("Confogl_LoadConfig");
 	MarkNativeAsOptional("Confogl_UnloadConfig");
 }

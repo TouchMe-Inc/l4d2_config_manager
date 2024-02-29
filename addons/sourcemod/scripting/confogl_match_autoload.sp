@@ -1,12 +1,8 @@
 #pragma semicolon               1
 #pragma newdecls                required
 
-
+#include <sourcemod>
 #include <confogl_core>
-
-#undef REQUIRE_PLUGIN
-#include <l4d2_changelevel>
-#define REQUIRE_PLUGIN
 
 
 public Plugin myinfo =
@@ -18,8 +14,6 @@ public Plugin myinfo =
 	url = "https://github.com/TouchMe-Inc/l4d2_confogl"
 }
 
-
-#define LIB_CHANGELEVEL         "l4d2_changelevel"
 
 #define CONFIG_PATH        "configs/confogl_match_autoload.txt"
 
@@ -47,32 +41,6 @@ ConVar
 
 bool g_bAllBotGameOldAValue = false;
 
-bool g_bChangeLevelAvailable = false;
-
-
-/**
-  * Global event. Called when a library is removed.
-  *
-  * @param sName     Library name
-  */
-public void OnLibraryRemoved(const char[] sName)
-{
-	if (StrEqual(sName, LIB_CHANGELEVEL)) {
-		g_bChangeLevelAvailable = false;
-	}
-}
-
-/**
-  * Global event. Called when a library is added.
-  *
-  * @param sName     Library name
-  */
-public void OnLibraryAdded(const char[] sName)
-{
-	if (StrEqual(sName, LIB_CHANGELEVEL)) {
-		g_bChangeLevelAvailable = true;
-	}
-}
 
 /**
  * Called before OnPluginStart.
@@ -128,16 +96,15 @@ public void OnConVarChange_GameMode(ConVar convar, const char[] sOldGamemode, co
 		{
 			strcopy(g_sNewGamemode, sizeof(g_sNewGamemode), sGamemode);
 			Confogl_UnloadConfig();
-			CreateTimer(1.0, Timer_RestartMap);
+			CreateTimer(1.0, Timer_SetGamemodeAndDifficulty);
 		}
 	}
 }
 
-Action Timer_RestartMap(Handle hTimer)
+Action Timer_SetGamemodeAndDifficulty(Handle hTimer)
 {
 	SetConVarString(g_cvGameMode, g_sNewGamemode);
 	SetConVarString(g_cvDifficulty, g_sDifficulty);
-	RestartMap();
 
 	return Plugin_Stop;
 }
@@ -180,7 +147,6 @@ public void OnAllPluginsLoaded()
 
 	g_bInit = true;
 	g_bLoopFixed = false;
-	g_bChangeLevelAvailable = LibraryExists(LIB_CHANGELEVEL);
 
 	if (!Confogl_IsConfigLoaded() && IsEmptyServer())
 	{
@@ -203,28 +169,31 @@ Action Event_PlayerDisconnect(Event event, const char[] sName, bool bDontBroadca
 		return Plugin_Continue;
 	}
 
-	g_bAllBotGameOldAValue = GetConVarBool(g_cvAllBotGame);
-	SetConVarBool(g_cvAllBotGame, true, .notify = false);
+	SetCommandFlags("crash", GetCommandFlags("crash") &~ FCVAR_CHEAT);
+	ServerCommand("crash");
 
-	if (Confogl_IsConfigLoaded()) {
-		Confogl_UnloadConfig();
-	}
+	// g_bAllBotGameOldAValue = GetConVarBool(g_cvAllBotGame);
+	// SetConVarBool(g_cvAllBotGame, true, .notify = false);
 
-	CreateTimer(1.0, Timer_LoadDefaultConfig);
+	// if (Confogl_IsConfigLoaded()) {
+	// 	Confogl_UnloadConfig();
+	// }
+
+	// CreateTimer(1.0, Timer_LoadDefaultConfig);
 
 	return Plugin_Continue;
 }
 
-Action Timer_LoadDefaultConfig(Handle hTimer)
-{
-	char sConfig[64];
+// Action Timer_LoadDefaultConfig(Handle hTimer)
+// {
+// 	char sConfig[64];
 
-	if (GetTrieString(g_hGamemodeConfig, "default", sConfig, sizeof(sConfig))) {
-		Confogl_LoadConfig(sConfig);
-	}
+// 	if (GetTrieString(g_hGamemodeConfig, "default", sConfig, sizeof(sConfig))) {
+// 		Confogl_LoadConfig(sConfig);
+// 	}
 
-	return Plugin_Stop;
-}
+// 	return Plugin_Stop;
+// }
 
 public void Confogl_OnLoadConfig()
 {
@@ -243,15 +212,4 @@ bool IsEmptyServer(int iIgnoreClient = -1)
 	}
 
 	return true;
-}
-
-void RestartMap()
-{
-	char sMap[32]; GetCurrentMap(sMap, sizeof(sMap));
-
-	if (g_bChangeLevelAvailable) {
-		L4D2_ChangeLevel(sMap);
-	} else {
-		ServerCommand("changelevel %s", sMap);
-	}
 }

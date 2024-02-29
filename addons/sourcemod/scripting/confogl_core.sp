@@ -1,3 +1,6 @@
+#pragma semicolon               1
+#pragma newdecls                required
+
 #include <sourcemod>
 
 #undef REQUIRE_PLUGIN
@@ -9,7 +12,7 @@ public Plugin myinfo =
 {
 	name = "ConfoglCore",
 	author = "TouchMe",
-	description = "N/a",
+	description = "The plugin allows you to run configs located in the \'configs/confogl\' folder",
 	version = "build0000",
 	url = "https://github.com/TouchMe-Inc/l4d2_confogl"
 }
@@ -89,9 +92,7 @@ public void OnLibraryAdded(const char[] sName)
   */
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	EngineVersion engine = GetEngineVersion();
-
-	if (engine != Engine_Left4Dead2)
+	if (GetEngineVersion() != Engine_Left4Dead2)
 	{
 		strcopy(error, err_max, "Plugin only supports Left 4 Dead 2.");
 		return APLRes_SilentFailure;
@@ -127,12 +128,31 @@ int Native_LoadConfig(Handle plugin, int numParams)
 
 	GetNativeString(1, sConfigName, sizeof(sConfigName));
 
-	return LoadConfig(sConfigName);
+	if (IsConfigLoaded())
+	{
+		if (UnloadConfig())
+		{
+			DataPack hPack = CreateDataPack();
+			hPack.WriteString(sConfigName);
+
+			CreateTimer(0.1, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
+		}
+	}
+
+	else if (LoadConfig(sConfigName)) {
+		CreateTimer(0.1, Timer_ApplyAction, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return 1;
 }
 
 int Native_UnloadConfig(Handle plugin, int numParams)
 {
-	return UnloadConfig();
+	if (UnloadConfig()) {
+		CreateTimer(0.1, Timer_ApplyAction, false, .flags = TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return 1;
 }
 
 public void OnPluginStart()
@@ -158,8 +178,8 @@ Action Cmd_AddCvar(int iArgs)
 		return Plugin_Handled;
 	}
 
-	char sConVarName[256]; GetCmdArg(1, sConVarName, sizeof(sConVarName));
-	char sConVarValue[512]; GetCmdArg(2, sConVarValue, sizeof(sConVarValue));
+	char sConVarName[128]; GetCmdArg(1, sConVarName, sizeof(sConVarName));
+	char sConVarValue[256]; GetCmdArg(2, sConVarValue, sizeof(sConVarValue));
 
 	if (strlen(sConVarName) >= CVAR_NAME_MAX)
 	{
@@ -254,12 +274,6 @@ bool IsConfigLoaded() {
 
 bool LoadConfig(const char[] sConfigName)
 {
-	if (IsConfigLoaded())
-	{
-		LogError("Failed to load configuration \"%s\": Configuration already loaded \"%s\"", sConfigName, g_sConfigName);
-		return false;
-	}
-
 	char sPath[PLATFORM_MAX_PATH];
 	FormatEx(sPath, sizeof(sPath), "%sconfogl%c%s", g_sConfoglPath, g_cDirSeparator, sConfigName);
 
@@ -278,31 +292,14 @@ bool LoadConfig(const char[] sConfigName)
 	}
 
 	ServerCommand("sm plugins load_unlock");
-
-	UnloadPlugins();
-	ResetConVars();
+	ServerExecute();
 
 	ServerCommand("exec %s", sConfigPath[strlen(g_sConfoglPath)]);
+	ServerExecute();
 
 	strcopy(g_sConfigName,  sizeof(g_sConfigName), sConfigName);
 
-	CreateTimer(3.0, Timer_ApplyConfig, .flags = TIMER_FLAG_NO_MAPCHANGE);
-
 	return true;
-}
-
-Action Timer_ApplyConfig(Handle hTimer)
-{
-	ServerCommand("sm plugins load_lock");
-
-	/**
-	 * Restart so that all modules and plugins work correctly.
-	 */
-	RestartMap();
-
-	ExecForwardWithoutParams(g_hFwdOnLoadConfig);
-
-	return Plugin_Stop;
 }
 
 bool UnloadConfig()
@@ -330,17 +327,47 @@ bool UnloadConfig()
 	}
 
 	ServerCommand("sm plugins load_unlock");
+	ServerExecute();
 
 	ServerCommand("exec %s", sConfigPath[strlen(g_sConfoglPath)]);
+	ServerExecute();
 
 	g_sConfigName[0] = '\0';
 
-	UnloadPlugins();
 	ResetConVars();
-
-	ExecForwardWithoutParams(g_hFwdOnUnloadConfig);
+	UnloadPlugins();
 
 	return true;
+}
+
+Action Timer_LoadConfig(Handle hTimer, Handle hPack)
+{
+	char sConfigName[CONFIG_NAME_MAX];
+
+	ResetPack(hPack);
+	ReadPackString(hPack, sConfigName, sizeof(sConfigName));
+	CloseHandle(hPack);
+
+	LoadConfig(sConfigName);
+
+	CreateTimer(0.1, Timer_ApplyAction, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
+
+	return Plugin_Stop;
+}
+
+Action Timer_ApplyAction(Handle hTimer, bool bIsLoad)
+{
+	ServerCommand("sm plugins load_lock");
+	ServerExecute();
+
+	/**
+	 * Restart so that all modules and plugins work correctly.
+	 */
+	RestartMap();
+
+	ExecForwardWithoutParams(bIsLoad ? g_hFwdOnLoadConfig : g_hFwdOnUnloadConfig);
+
+	return Plugin_Stop;
 }
 
 void ResetConVars()
@@ -364,7 +391,7 @@ void ResetConVars()
 	}
 
 	/*
-	 * Set the old value of cvar. 
+	 * Set the old value of cvar.
 	 * If you run it in one loop, the hooks will not have time to unload.
 	 */
 	for (int iIndex = 0; iIndex < iSize; iIndex ++)
@@ -439,9 +466,11 @@ void UnloadPlugins()
 		}
 
 		GetPluginFilename(hPlugin, sPluginFilename, sizeof(sPluginFilename));
-		
-		if (!IsPluginInWhitelist(sPluginFilename)) {
+
+		if (!IsPluginInWhitelist(sPluginFilename))
+		{
 			ServerCommand("sm plugins unload %s", sPluginFilename);
+			ServerExecute();
 		}
 	}
 
@@ -470,5 +499,6 @@ void RestartMap()
 		L4D2_ChangeLevel(sMap);
 	} else {
 		ServerCommand("changelevel %s", sMap);
+		ServerExecute();
 	}
 }
