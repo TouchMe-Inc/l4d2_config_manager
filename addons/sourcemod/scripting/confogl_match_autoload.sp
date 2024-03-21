@@ -9,8 +9,8 @@ public Plugin myinfo =
 {
 	name = "ConfoglMatchAutoload",
 	author = "TouchMe",
-	description = "N/a",
-	version = "build0000",
+	description = "Automatic loading of config (for each mode)",
+	version = "build0001",
 	url = "https://github.com/TouchMe-Inc/l4d2_confogl"
 }
 
@@ -35,11 +35,8 @@ Handle
 
 ConVar
 	g_cvGameMode = null,
-	g_cvDifficulty = null,
-	g_cvAllBotGame = null
+	g_cvDifficulty = null
 ;
-
-bool g_bAllBotGameOldAValue = false;
 
 
 /**
@@ -66,11 +63,8 @@ public void OnPluginStart()
 	LoadGamemodes(g_hGamemodes = CreateKeyValues("Gamemodes"));
 	FillGamemodeConfig(g_hGamemodes, g_hGamemodeConfig = CreateTrie());
 
-	g_cvAllBotGame = FindConVar("sb_all_bot_game");
 	HookConVarChange((g_cvDifficulty = FindConVar("z_difficulty")), ConVarChange_Difficulty);
 	HookConVarChange((g_cvGameMode = FindConVar("mp_gamemode")), OnConVarChange_GameMode);
-
-	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
 
 	g_bInit = false;
 }
@@ -158,48 +152,8 @@ public void OnAllPluginsLoaded()
 	}
 }
 
-Action Event_PlayerDisconnect(Event event, const char[] sName, bool bDontBroadcast)
-{
-	int iClient = GetClientOfUserId(GetEventInt(event, "userid"));
-
-	if (!iClient
-	|| (IsClientConnected(iClient) && !IsClientInGame(iClient))
-	|| IsFakeClient(iClient)
-	|| !IsEmptyServer(iClient)) {
-		return Plugin_Continue;
-	}
-
-	SetCommandFlags("crash", GetCommandFlags("crash") &~ FCVAR_CHEAT);
-	ServerCommand("crash");
-
-	// g_bAllBotGameOldAValue = GetConVarBool(g_cvAllBotGame);
-	// SetConVarBool(g_cvAllBotGame, true, .notify = false);
-
-	// if (Confogl_IsConfigLoaded()) {
-	// 	Confogl_UnloadConfig();
-	// }
-
-	// CreateTimer(1.0, Timer_LoadDefaultConfig);
-
-	return Plugin_Continue;
-}
-
-// Action Timer_LoadDefaultConfig(Handle hTimer)
-// {
-// 	char sConfig[64];
-
-// 	if (GetTrieString(g_hGamemodeConfig, "default", sConfig, sizeof(sConfig))) {
-// 		Confogl_LoadConfig(sConfig);
-// 	}
-
-// 	return Plugin_Stop;
-// }
-
-public void Confogl_OnLoadConfig()
-{
+public void Confogl_OnLoadConfig() {
 	g_bLoopFixed = false;
-
-	SetConVarBool(g_cvAllBotGame, g_bAllBotGameOldAValue, .notify = false);
 }
 
 bool IsEmptyServer(int iIgnoreClient = -1)
