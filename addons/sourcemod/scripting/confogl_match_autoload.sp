@@ -157,7 +157,7 @@ public void Confogl_OnLoadConfig() {
 
 bool IsEmptyServer()
 {
-	for(int iClient = 1; iClient <= MaxClients; iClient ++)
+	for (int iClient = 1; iClient <= MaxClients; iClient ++)
 	{
 		if (IsClientConnected(iClient) && !IsFakeClient(iClient)) {
 			return false;
