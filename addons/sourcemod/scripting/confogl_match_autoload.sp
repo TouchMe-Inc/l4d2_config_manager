@@ -5,8 +5,7 @@
 #include <confogl_core>
 
 
-public Plugin myinfo =
-{
+public Plugin myinfo = {
 	name = "ConfoglMatchAutoload",
 	author = "TouchMe",
 	description = "Automatic loading of config (for each mode)",
@@ -156,11 +155,11 @@ public void Confogl_OnLoadConfig() {
 	g_bLoopFixed = false;
 }
 
-bool IsEmptyServer(int iIgnoreClient = -1)
+bool IsEmptyServer()
 {
 	for(int iClient = 1; iClient <= MaxClients; iClient ++)
 	{
-		if (IsClientConnected(iClient) && !IsFakeClient(iClient) && iIgnoreClient != iClient) {
+		if (IsClientConnected(iClient) && !IsFakeClient(iClient)) {
 			return false;
 		}
 	}
