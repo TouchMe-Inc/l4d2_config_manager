@@ -1,0 +1,47 @@
+"Phrases"
+{
+	"TAG"
+	{
+		"ru"			"<{green}Confogl Match{default}> "
+	}
+
+	"CATEGORY_MENU_TITLE"
+	{
+		"#format"		"{1:s}"
+		"ru"			"Выберите категорию:\n(Текущий конфиг: {1})"
+	}
+
+	"CONFIG_NONE"
+	{
+		"ru"			"Не загружен"
+	}
+
+	"CONFIG_UNKNOWN"
+	{
+		"ru"			"Неопределён"
+	}
+
+	"CONFIG_MENU_TITLE"
+	{
+		"#format"		"{1:s},{2:s}"
+		"ru"			"Категория \"{1}\":\n(Текущий конфиг: {2})"
+	}
+
+	"VOTE_COULDOWN"
+	{
+		"#format"		"{1:d}"
+		"ru"			"В данный момент невозможно запустить голосование. Повторите попытку через {1} секунду."
+	}
+
+	"VOTE_MATCH_START"
+	{
+		"#format"		"{1:s}"
+		"ru"			"Загрузить конфиг {1}"
+	}
+
+	"VOTE_MATCH_END"
+	{
+		"#format"		"{1:s}"
+		"ru"			"Выгрузить конфиг {1}"
+	}
+}

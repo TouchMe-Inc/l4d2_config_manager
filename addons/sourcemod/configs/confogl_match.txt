@@ -1,9 +1,0 @@
-"ConfigList"
-{
-	"Custom Configs"
-	{
-		"touchme_t2" {
-			"name" "My Test config"
-		}
-	}
-}
