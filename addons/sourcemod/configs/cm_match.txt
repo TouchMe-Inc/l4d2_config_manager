@@ -2,8 +2,8 @@
 {
 	"Custom Configs"
 	{
-		"touchme_t2" {
-			"name" "My Test config"
+		"touchme_versus_t2" {
+			"name" "Versus | T2"
 		}
 	}
 }
