@@ -10,12 +10,16 @@
 
 public Plugin myinfo =
 {
-	name =        "ConfigManager",
-	author =      "ConfoglTeam, TouchMe",
-	description = "The plugin allows you to run configs located in the \'configs/config_manager\' folder",
-	version =     "build_0001",
-	url =         "https://github.com/TouchMe-Inc/l4d2_config_manager"
+    name =        "ConfigManager",
+    author =      "ConfoglTeam, TouchMe",
+    description = "The plugin allows you to run configs located in the \"cfg/config_manager\" folder",
+    version =     "build_0002",
+    url =         "https://github.com/TouchMe-Inc/l4d2_config_manager"
 }
+
+
+#define PATH_TO_CFG_RELATIVE    "../../cfg/"
+#define CONFIG_MANAGER_DIR      "config_manager"
 
 /*
  * Libs.
@@ -31,30 +35,21 @@ public Plugin myinfo =
 #define PLUGIN_NAME_MAX         128
 
 
-enum struct ConVarInfo
-{
-	ConVar convar;
-	char old_value[CVAR_VALUE_MAX];
-	char new_value[CVAR_VALUE_MAX];
-}
-
-Handle
-	g_hPluginWhiteList = null,
-	g_hConVarList = null
+StringMap
+    g_smPluginWhiteList = null,
+    g_smUpdatedConVars = null
 ;
 
 Handle
-	g_hFwdOnLoadConfig = null,
-	g_hFwdOnUnloadConfig = null
+    g_hFwdOnLoadConfig = null,
+    g_hFwdOnUnloadConfig = null
 ;
 
-char g_sConfoglPath[PLATFORM_MAX_PATH];
+char PATH_TO_CFG_ABSOLUTE[PLATFORM_MAX_PATH];
 
-char g_cDirSeparator;
+char g_szConfigName[CONFIG_NAME_MAX];
 
-char g_sConfigName[CONFIG_NAME_MAX];
-
-bool g_bConVarChange = false;
+bool g_bConVarHookIgnore = false;
 
 bool g_bChangeLevelAvailable = false;
 
@@ -63,7 +58,7 @@ bool g_bChangeLevelAvailable = false;
   * Global event. Called when all plugins loaded.
   */
 public void OnAllPluginsLoaded() {
-	g_bChangeLevelAvailable = LibraryExists(LIB_CHANGELEVEL);
+    g_bChangeLevelAvailable = LibraryExists(LIB_CHANGELEVEL);
 }
 
 /**
@@ -73,9 +68,9 @@ public void OnAllPluginsLoaded() {
   */
 public void OnLibraryRemoved(const char[] sName)
 {
-	if (StrEqual(sName, LIB_CHANGELEVEL)) {
-		g_bChangeLevelAvailable = false;
-	}
+    if (StrEqual(sName, LIB_CHANGELEVEL)) {
+        g_bChangeLevelAvailable = false;
+    }
 }
 
 /**
@@ -85,9 +80,9 @@ public void OnLibraryRemoved(const char[] sName)
   */
 public void OnLibraryAdded(const char[] sName)
 {
-	if (StrEqual(sName, LIB_CHANGELEVEL)) {
-		g_bChangeLevelAvailable = true;
-	}
+    if (StrEqual(sName, LIB_CHANGELEVEL)) {
+        g_bChangeLevelAvailable = true;
+    }
 }
 
 /**
@@ -95,421 +90,361 @@ public void OnLibraryAdded(const char[] sName)
   */
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (GetEngineVersion() != Engine_Left4Dead2)
-	{
-		strcopy(error, err_max, "Plugin only supports Left 4 Dead 2.");
-		return APLRes_SilentFailure;
-	}
+    if (GetEngineVersion() != Engine_Left4Dead2)
+    {
+        strcopy(error, err_max, "Plugin only supports Left 4 Dead 2.");
+        return APLRes_SilentFailure;
+    }
 
-	g_hFwdOnLoadConfig   = CreateGlobalForward("ConfigManager_OnLoadConfig", ET_Ignore);
-	g_hFwdOnUnloadConfig = CreateGlobalForward("ConfigManager_OnUnloadConfig", ET_Ignore);
+    g_hFwdOnLoadConfig   = CreateGlobalForward("ConfigManager_OnLoadConfig", ET_Ignore);
+    g_hFwdOnUnloadConfig = CreateGlobalForward("ConfigManager_OnUnloadConfig", ET_Ignore);
 
-	CreateNative("ConfigManager_IsConfigLoaded", Native_IsConfigLoaded);
-	CreateNative("ConfigManager_GetConfigName", Native_GetConfigName);
-	CreateNative("ConfigManager_LoadConfig", Native_LoadConfig);
-	CreateNative("ConfigManager_UnloadConfig", Native_UnloadConfig);
+    CreateNative("ConfigManager_IsConfigLoaded", Native_IsConfigLoaded);
+    CreateNative("ConfigManager_GetConfigName", Native_GetConfigName);
+    CreateNative("ConfigManager_LoadConfig", Native_LoadConfig);
+    CreateNative("ConfigManager_UnloadConfig", Native_UnloadConfig);
 
-	RegPluginLibrary("config_manager");
+    RegPluginLibrary("config_manager");
 
-	return APLRes_Success;
+    return APLRes_Success;
 }
 
 int Native_IsConfigLoaded(Handle plugin, int numParams) {
-	return IsConfigLoaded();
+    return IsConfigLoaded();
 }
 
 int Native_GetConfigName(Handle plugin, int numParams)
 {
-	SetNativeString(1, g_sConfigName, GetNativeCell(2), true);
+    SetNativeString(1, g_szConfigName, GetNativeCell(2), true);
 
-	return 1;
+    return 1;
 }
 
 int Native_LoadConfig(Handle plugin, int numParams)
 {
-	char sConfigName[CONFIG_NAME_MAX];
+    char szConfigName[CONFIG_NAME_MAX];
 
-	GetNativeString(1, sConfigName, sizeof(sConfigName));
+    GetNativeString(1, szConfigName, sizeof(szConfigName));
 
-	if (IsConfigLoaded())
-	{
-		if (UnloadConfig())
-		{
-			DataPack hPack = CreateDataPack();
-			hPack.WriteString(sConfigName);
+    if (IsConfigLoaded())
+    {
+        if (UnloadConfig())
+        {
+            DataPack hPack;
+            CreateDataTimer(0.1, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
+            hPack.WriteString(szConfigName);
+        }
+    }
 
-			CreateTimer(0.1, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
-		}
-	}
+    else if (LoadConfig(szConfigName)) {
+        CreateTimer(1.0, Timer_ApplyAction, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
+    }
 
-	else if (LoadConfig(sConfigName)) {
-		CreateTimer(0.5, Timer_ApplyAction, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
-	}
-
-	return 1;
+    return 1;
 }
 
 int Native_UnloadConfig(Handle plugin, int numParams)
 {
-	if (UnloadConfig()) {
-		CreateTimer(0.5, Timer_ApplyAction, false, .flags = TIMER_FLAG_NO_MAPCHANGE);
-	}
+    if (!IsConfigLoaded()) {
+        return 1;
+    }
 
-	return 1;
+    if (UnloadConfig()) {
+        CreateTimer(1.0, Timer_ApplyAction, false, .flags = TIMER_FLAG_NO_MAPCHANGE);
+    }
+
+    return 1;
 }
 
 public void OnPluginStart()
 {
-	LoadPluginWhitelist(g_hPluginWhiteList = CreateArray(ByteCountToCells(PLUGIN_NAME_MAX)));
+    BuildPath(Path_SM, PATH_TO_CFG_ABSOLUTE, sizeof(PATH_TO_CFG_ABSOLUTE), PATH_TO_CFG_RELATIVE);
 
-	BuildPath(Path_SM, g_sConfoglPath, sizeof(g_sConfoglPath), "../../cfg/");
-	g_cDirSeparator = g_sConfoglPath[(strlen(g_sConfoglPath) - 1)];
+    g_smPluginWhiteList = new StringMap();
+    g_smUpdatedConVars = new StringMap();
 
-	g_hConVarList = CreateTrie();
+    GetPluginWhitelist(g_smPluginWhiteList);
 
-	RegServerCmd("config_manager_addcvar", Cmd_AddCvar, "config_manager_addcvar <cvar> <value>");
-	RegServerCmd("config_manager_deletecvar", Cmd_DeleteCvar, "config_manager_deletecvar <cvar>");
-	RegServerCmd("config_manager_resetcvars", Cmd_ResetCvars);
+    RegServerCmd("config_manager_addcvar", Cmd_AddCvar, "config_manager_addcvar <cvar> <value>");
+    RegServerCmd("config_manager_deletecvar", Cmd_DeleteCvar, "config_manager_deletecvar <cvar>");
+    RegServerCmd("config_manager_resetcvars", Cmd_ResetCvars);
 }
 
 Action Cmd_AddCvar(int iArgs)
 {
-	if (iArgs != 2)
-	{
-		char sCmdArgs[128]; GetCmdArgString(sCmdArgs, sizeof(sCmdArgs));
-		LogError("Invalid command \"%s\". Usage: config_manager_addcvar <cvar> <value>", sCmdArgs);
-		return Plugin_Handled;
-	}
+    if (iArgs != 2)
+    {
+        char sCmdArgs[128]; GetCmdArgString(sCmdArgs, sizeof(sCmdArgs));
+        LogError("Invalid command \"%s\". Usage: config_manager_addcvar <cvar> <value>", sCmdArgs);
+        return Plugin_Handled;
+    }
 
-	char sConVarName[128]; GetCmdArg(1, sConVarName, sizeof(sConVarName));
-	char sConVarValue[256]; GetCmdArg(2, sConVarValue, sizeof(sConVarValue));
+    char szConVarName[CVAR_NAME_MAX]; GetCmdArg(1, szConVarName, sizeof(szConVarName));
+    char szConVarValue[CVAR_VALUE_MAX]; GetCmdArg(2, szConVarValue, sizeof(szConVarValue));
 
-	if (strlen(sConVarName) >= CVAR_NAME_MAX)
-	{
-		LogError("ConVar name \"%s\" is longer than max length \"%d\"", sConVarName, CVAR_NAME_MAX);
-		return Plugin_Handled;
-	}
+    if (strlen(szConVarName) >= CVAR_NAME_MAX)
+    {
+        LogError("ConVar name \"%s\" is longer than max length \"%d\"", szConVarName, CVAR_NAME_MAX);
+        return Plugin_Handled;
+    }
 
-	if (strlen(sConVarValue) >= CVAR_VALUE_MAX)
-	{
-		LogError("ConVar \"%s\" has value \"%s\" is longer than max length \"%d\"", sConVarName, sConVarValue, CVAR_VALUE_MAX);
-		return Plugin_Handled;
-	}
+    if (strlen(szConVarValue) >= CVAR_VALUE_MAX)
+    {
+        LogError("ConVar \"%s\" has value \"%s\" is longer than max length \"%d\"", szConVarName, szConVarValue, CVAR_VALUE_MAX);
+        return Plugin_Handled;
+    }
 
-	ConVar convar = FindConVar(sConVarName);
+    if (g_smUpdatedConVars.ContainsKey(szConVarName))
+    {
+        LogError("ConVar \"%s\" already added", szConVarName);
+        return Plugin_Handled;
+    }
 
-	if (convar == null)
-	{
-		LogError("Could not find Convar \"%s\" for \"%s\"", sConVarName, g_sConfigName);
-		return Plugin_Handled;
-	}
+    ConVar convar = FindConVar(szConVarName);
+    if (convar == null)
+    {
+        LogError("Could not find Convar \"%s\"", szConVarName);
+        return Plugin_Handled;
+    }
 
-	ConVarInfo entry;
+    char szConVarOldValue[CVAR_VALUE_MAX];
+    GetConVarString(convar, szConVarOldValue, sizeof(szConVarOldValue));
 
-	if (GetTrieArray(g_hConVarList, sConVarName, entry, sizeof(entry)))
-	{
-		LogError("ConVar \"%s\" already added for \"%s\"", sConVarName, g_sConfigName);
-		return Plugin_Handled;
-	}
+    SetConVarStringSilence(convar, szConVarValue);
+    HookConVarChange(convar, OnConVarChanged);
 
-	entry.convar = convar;
-	GetConVarString(entry.convar, entry.old_value, sizeof(entry.old_value));
-	strcopy(entry.new_value,  sizeof(entry.new_value), sConVarValue);
+    g_smUpdatedConVars.SetString(szConVarName, szConVarOldValue);
 
-	SetConVarStringSilence(entry.convar, sConVarValue);
-	HookConVarChange(entry.convar, OnConVarChanged);
-
-	SetTrieArray(g_hConVarList, sConVarName, entry, sizeof(entry));
-
-	return Plugin_Handled;
+    return Plugin_Handled;
 }
 
 Action Cmd_DeleteCvar(int iArgs)
 {
-	if (iArgs != 1)
-	{
-		char sCmdArgs[128]; GetCmdArgString(sCmdArgs, sizeof(sCmdArgs));
-		LogError("Invalid command \"%s\". Usage: config_manager_deletecvar <cvar>", sCmdArgs);
-		return Plugin_Handled;
-	}
+    if (iArgs != 1)
+    {
+        char sCmdArgs[128]; GetCmdArgString(sCmdArgs, sizeof(sCmdArgs));
+        LogError("Invalid command \"%s\". Usage: config_manager_deletecvar <cvar>", sCmdArgs);
+        return Plugin_Handled;
+    }
 
-	char sConVarName[CVAR_NAME_MAX]; GetCmdArg(1, sConVarName, sizeof(sConVarName));
+    char szConVarName[CVAR_NAME_MAX]; GetCmdArg(1, szConVarName, sizeof(szConVarName));
 
-	ConVarInfo entry;
+    if (!g_smUpdatedConVars.ContainsKey(szConVarName))
+    {
+        LogError("ConVar \"%s\" not found", szConVarName);
+        return Plugin_Handled;
+    }
 
-	if (!GetTrieArray(g_hConVarList, sConVarName, entry, sizeof(entry)))
-	{
-		LogError("ConVar \"%s\" not found", sConVarName);
-		return Plugin_Handled;
-	}
+    ConVar convar = FindConVar(szConVarName);
+    if (convar == null)
+    {
+        LogError("Could not find Convar \"%s\"", szConVarName);
+        return Plugin_Handled;
+    }
 
-	UnhookConVarChange(entry.convar, OnConVarChanged);
-	SetConVarStringSilence(entry.convar, entry.old_value);
+    char szConVarOldValue[CVAR_VALUE_MAX];
+    g_smUpdatedConVars.GetString(szConVarName, szConVarOldValue, sizeof(szConVarOldValue));
 
-	RemoveFromTrie(g_hConVarList, sConVarName);
+    UnhookConVarChange(convar, OnConVarChanged);
+    SetConVarStringSilence(convar, szConVarOldValue);
 
-	return Plugin_Handled;
+    g_smUpdatedConVars.Remove(szConVarName);
+
+    return Plugin_Handled;
 }
 
 Action Cmd_ResetCvars(int iArgs)
 {
-	ResetConVars();
+    ResetConVars();
 
-	return Plugin_Handled;
+    return Plugin_Handled;
 }
 
 public void OnConVarChanged(ConVar convar, const char[] sOldValue, const char[] sNewValue)
 {
-	if (g_bConVarChange) {
-		return;
-	}
+    if (g_bConVarHookIgnore) {
+        return;
+    }
 
-	char sConVarName[CVAR_NAME_MAX]; GetConVarName(convar, sConVarName, sizeof(sConVarName));
+    g_bConVarHookIgnore = true;
 
-	g_bConVarChange = true;
+    SetConVarStringSilence(convar, sOldValue);
 
-	ConVarInfo entry;
-
-	if (GetTrieArray(g_hConVarList, sConVarName, entry, sizeof(entry))) {
-		SetConVarStringSilence(convar, entry.new_value);
-	} else {
-		SetConVarStringSilence(convar, sOldValue);
-	}
-
-	g_bConVarChange = false;
+    g_bConVarHookIgnore = false;
 }
 
 bool IsConfigLoaded() {
-	return (g_sConfigName[0] != '\0');
+    return (g_szConfigName[0] != '\0');
 }
 
-bool LoadConfig(const char[] sConfigName)
+bool LoadConfig(const char[] szConfigName)
 {
-	char sPath[PLATFORM_MAX_PATH];
-	FormatEx(sPath, sizeof(sPath), "%sconfig_manager%c%s", g_sConfoglPath, g_cDirSeparator, sConfigName);
+    char szPathToConfigLoadFile[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPathToConfigLoadFile, sizeof(szPathToConfigLoadFile), "%s/%s/%s/config_load.cfg", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, szConfigName);
 
-	if (!DirExists(sPath))
-	{
-		LogError("Failed to load configuration \"%s\": Dir \"%s\" not found", sConfigName, sPath);
-		return false;
-	}
+    if (!FileExists(szPathToConfigLoadFile))
+    {
+        LogError("Failed to load configuration \"%s\": File \"%s\" not found", szConfigName, szPathToConfigLoadFile);
+        return false;
+    }
 
-	char sConfigPath[PLATFORM_MAX_PATH]; FormatEx(sConfigPath, sizeof(sConfigPath), "%s%cconfig_load.cfg", sPath, g_cDirSeparator);
+    ServerCommand("sm plugins load_unlock");
+    ServerCommand("exec %s", szPathToConfigLoadFile[strlen(PATH_TO_CFG_ABSOLUTE)]);
 
-	if (!FileExists(sConfigPath))
-	{
-		LogError("Failed to load configuration \"%s\": File \"%s\" not found", sConfigName, sConfigPath);
-		return false;
-	}
+    strcopy(g_szConfigName,  sizeof(g_szConfigName), szConfigName);
 
-	ServerCommand("sm plugins load_unlock");
-	ServerExecute();
-
-	ServerCommand("exec %s", sConfigPath[strlen(g_sConfoglPath)]);
-	ServerExecute();
-
-	strcopy(g_sConfigName,  sizeof(g_sConfigName), sConfigName);
-
-	return true;
+    return true;
 }
 
 bool UnloadConfig()
 {
-	if (!IsConfigLoaded())
-	{
-		LogError("Failed to unload configuration: Configuration not loaded");
-		return false;
-	}
+    char szPathToConfigUnloadFile[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPathToConfigUnloadFile, sizeof(szPathToConfigUnloadFile), "%s/%s/%s/config_unload.cfg", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, g_szConfigName);
 
-	char sPath[PLATFORM_MAX_PATH]; FormatEx(sPath, sizeof(sPath), "%sconfig_manager%c%s", g_sConfoglPath, g_cDirSeparator, g_sConfigName);
+    if (!FileExists(szPathToConfigUnloadFile))
+    {
+        LogError("Failed to unload configuration \"%s\": File \"%s\" not found", g_szConfigName, szPathToConfigUnloadFile);
+        return false;
+    }
 
-	if (!DirExists(sPath))
-	{
-		LogError("Failed to unload configuration \"%s\": Dir \"%s\" not found", g_sConfigName, sPath);
-		return false;
-	}
+    g_szConfigName[0] = '\0';
 
-	char sConfigPath[PLATFORM_MAX_PATH]; FormatEx(sConfigPath, sizeof(sConfigPath), "%s%cconfig_unload.cfg", sPath, g_cDirSeparator);
+    ServerCommand("sm plugins load_unlock");
+    ServerCommand("exec %s", szPathToConfigUnloadFile[strlen(PATH_TO_CFG_ABSOLUTE)]);
 
-	if (!FileExists(sConfigPath))
-	{
-		LogError("Failed to unload configuration \"%s\": File \"%s\" not found", g_sConfigName, sPath);
-		return false;
-	}
+    ResetConVars();
+    UnloadPlugins(g_smPluginWhiteList);
 
-	ServerCommand("sm plugins load_unlock");
-	ServerExecute();
-
-	ServerCommand("exec %s", sConfigPath[strlen(g_sConfoglPath)]);
-	ServerExecute();
-
-	g_sConfigName[0] = '\0';
-
-	ResetConVars();
-	UnloadPlugins();
-
-	return true;
+    return true;
 }
 
 Action Timer_LoadConfig(Handle hTimer, Handle hPack)
 {
-	char sConfigName[CONFIG_NAME_MAX];
+    char szConfigName[CONFIG_NAME_MAX];
 
-	ResetPack(hPack);
-	ReadPackString(hPack, sConfigName, sizeof(sConfigName));
-	CloseHandle(hPack);
+    ResetPack(hPack);
+    ReadPackString(hPack, szConfigName, sizeof(szConfigName));
 
-	LoadConfig(sConfigName);
+    LoadConfig(szConfigName);
 
-	CreateTimer(0.5, Timer_ApplyAction, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
+    CreateTimer(1.0, Timer_ApplyAction, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
 
-	return Plugin_Stop;
+    return Plugin_Stop;
 }
 
 Action Timer_ApplyAction(Handle hTimer, bool bIsLoad)
 {
-	ServerCommand("sm plugins load_lock");
-	ServerExecute();
+    ServerCommand("sm plugins load_lock");
+    ServerExecute();
 
-	/**
-	 * Restart so that all modules and plugins work correctly.
-	 */
-	RestartMap();
+    ExecForwardWithoutParams(bIsLoad ? g_hFwdOnLoadConfig : g_hFwdOnUnloadConfig);
 
-	ExecForwardWithoutParams(bIsLoad ? g_hFwdOnLoadConfig : g_hFwdOnUnloadConfig);
+    /**
+     * Restart so that all modules and plugins work correctly.
+     */
+    RestartMap();
 
-	return Plugin_Stop;
+    return Plugin_Stop;
 }
 
 void ResetConVars()
 {
-	Handle hSnapshot = CreateTrieSnapshot(g_hConVarList);
+    StringMapSnapshot hSnapshot = g_smUpdatedConVars.Snapshot();
 
-	int iSize = TrieSnapshotLength(hSnapshot);
+    char szConVarName[CVAR_NAME_MAX];
+    char szConVarOldValue[CVAR_VALUE_MAX];
+    for (int iIndex = hSnapshot.Length - 1; iIndex >= 0; iIndex--)
+    {
+        hSnapshot.GetKey(iIndex, szConVarName, sizeof(szConVarName));
 
-	char sConVarName[CVAR_NAME_MAX];
-	ConVarInfo entry;
+        ConVar convar = FindConVar(szConVarName);
+        if (convar != null)
+        {
+            g_smUpdatedConVars.GetString(szConVarName, szConVarOldValue, sizeof(szConVarOldValue));
+            UnhookConVarChange(convar, OnConVarChanged);
+            SetConVarStringSilence(convar, szConVarOldValue);
+        }
 
-	/*
-	 * First you need to remove all the hooks.
-	 */
-	for (int iIndex = 0; iIndex < iSize; iIndex ++)
-	{
-		GetTrieSnapshotKey(hSnapshot, iIndex, sConVarName, sizeof(sConVarName));
-		GetTrieArray(g_hConVarList, sConVarName, entry, sizeof(entry));
+        g_smUpdatedConVars.Remove(szConVarName);
+    }
 
-		UnhookConVarChange(entry.convar, OnConVarChanged);
-	}
-
-	/*
-	 * Set the old value of cvar.
-	 * If you run it in one loop, the hooks will not have time to unload.
-	 */
-	for (int iIndex = 0; iIndex < iSize; iIndex ++)
-	{
-		GetTrieSnapshotKey(hSnapshot, iIndex, sConVarName, sizeof(sConVarName));
-		GetTrieArray(g_hConVarList, sConVarName, entry, sizeof(entry));
-
-		SetConVarStringSilence(entry.convar, entry.old_value);
-
-		RemoveFromTrie(g_hConVarList, sConVarName);
-	}
-
-	CloseHandle(hSnapshot);
+    delete hSnapshot;
 }
 
-public void LoadPluginWhitelist(Handle hPluginWhiteList)
+void GetPluginWhitelist(StringMap smPluginWhiteList)
 {
-	char sPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sPath, sizeof(sPath), "plugins");
+    char sPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, sPath, sizeof(sPath), "plugins");
 
-	Handle dir = OpenDirectory(sPath);
+    DirectoryListing dir = OpenDirectory(sPath);
 
-	if (dir != INVALID_HANDLE)
-	{
-		char sFileName[128];
+    if (dir == null) {
+        return;
+    }
 
-		FileType type;
-		while (ReadDirEntry(dir, sFileName, sizeof(sFileName), type))
-		{
-			if (type != FileType_File) {
-				continue;
-			}
+    char szPluginName[PLUGIN_NAME_MAX];
+    FileType type;
+    while (ReadDirEntry(dir, szPluginName, sizeof(szPluginName), type))
+    {
+        if (type != FileType_File) {
+            continue;
+        }
 
-			PushArrayString(hPluginWhiteList, sFileName);
-		}
+        smPluginWhiteList.SetValue(szPluginName, 1);
+    }
 
-		CloseHandle(dir);
-	}
+    delete dir;
 }
 
-bool IsPluginInWhitelist(const char[] sPluginFilename)
+void UnloadPlugins(StringMap smPluginWhiteList)
 {
-	char sFileName[PLUGIN_NAME_MAX];
-	int iArraySize = GetArraySize(g_hPluginWhiteList);
+    Handle it = GetPluginIterator();
 
-	for (int iPlugin = 0; iPlugin < iArraySize; iPlugin ++)
-	{
-		GetArrayString(g_hPluginWhiteList, iPlugin, sFileName, sizeof(sFileName));
+    Handle hSelf = GetMyHandle();
 
-		if (StrEqual(sPluginFilename, sFileName, false)) {
-			return true;
-		}
-	}
+    char sPluginFilename[128];
 
-	return false;
-}
+    while (MorePlugins(it))
+    {
+        Handle hPlugin = ReadPlugin(it);
 
-void UnloadPlugins()
-{
-	Handle it = GetPluginIterator();
+        if (hSelf == hPlugin) {
+            continue;
+        }
 
-	Handle hThis = GetMyHandle();
+        GetPluginFilename(hPlugin, sPluginFilename, sizeof(sPluginFilename));
 
-	char sPluginFilename[PLUGIN_NAME_MAX];
+        if (!smPluginWhiteList.ContainsKey(sPluginFilename))
+        {
+            ServerCommand("sm plugins unload %s", sPluginFilename);
+            ServerExecute();
+        }
+    }
 
-	while (MorePlugins(it))
-	{
-		Handle hPlugin = ReadPlugin(it);
-
-		if (hThis == hPlugin) {
-			continue;
-		}
-
-		GetPluginFilename(hPlugin, sPluginFilename, sizeof(sPluginFilename));
-
-		if (!IsPluginInWhitelist(sPluginFilename))
-		{
-			ServerCommand("sm plugins unload %s", sPluginFilename);
-			ServerExecute();
-		}
-	}
-
-	CloseHandle(it);
+    CloseHandle(it);
 }
 
 void ExecForwardWithoutParams(Handle hForward)
 {
-	Call_StartForward(hForward);
-	Call_Finish();
+    Call_StartForward(hForward);
+    Call_Finish();
 }
 
-void SetConVarStringSilence(Handle hConVar, const char[] sValue)
+void SetConVarStringSilence(ConVar convar, const char[] sValue)
 {
-	int iFlags = GetConVarFlags(hConVar);
-	SetConVarFlags(hConVar, iFlags & ~FCVAR_NOTIFY);
-	SetConVarString(hConVar, sValue, .notify = false);
-	SetConVarFlags(hConVar, iFlags);
+    int iFlags = GetConVarFlags(convar);
+    SetConVarFlags(convar, iFlags & ~FCVAR_NOTIFY);
+    SetConVarString(convar, sValue);
+    SetConVarFlags(convar, iFlags);
 }
 
 void RestartMap()
 {
-	char sMap[32]; GetCurrentMap(sMap, sizeof(sMap));
+    char szCurrentMap[32]; GetCurrentMap(szCurrentMap, sizeof(szCurrentMap));
 
-	if (g_bChangeLevelAvailable) {
-		L4D2_ChangeLevel(sMap);
-	} else {
-		ServerCommand("changelevel %s", sMap);
-		ServerExecute();
-	}
+    if (g_bChangeLevelAvailable) {
+        L4D2_ChangeLevel(szCurrentMap);
+    } else {
+        ServerCommand("changelevel %s", szCurrentMap);
+    }
 }
