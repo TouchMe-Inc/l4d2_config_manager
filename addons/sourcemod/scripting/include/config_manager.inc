@@ -8,6 +8,9 @@ native void ConfigManager_GetConfigName(char[] sConfigName, int iLength);
 native void ConfigManager_LoadConfig(const char[] sConfigName);
 native void ConfigManager_UnloadConfig();
 
+forward void ConfigManager_OnLoadConfig();
+forward void ConfigManager_OnUnloadConfig();
+
 public SharedPlugin __pl_config_manager =
 {
 	name = "config_manager",
