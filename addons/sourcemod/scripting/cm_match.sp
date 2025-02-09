@@ -9,17 +9,18 @@
 
 public Plugin myinfo =
 {
-	name =        "ConfigManagerMatch",
-	author =      "TouchMe",
-	description = "The plugin allows you to load a config from a file",
-	version =     "build_0001",
-	url =         "https://github.com/TouchMe-Inc/l4d2_config_manager"
+    name =        "ConfigManagerMatch",
+    author =      "TouchMe",
+    description = "The plugin allows you to load a config from a file",
+    version =     "build_0002",
+    url =         "https://github.com/TouchMe-Inc/l4d2_config_manager"
 }
 
 
-#define CONFIG_NAME_MAX         64
+#define MAX_CONFIG_NAME_LENGTH         64
+#define MAX_CONFIG_TITLE_LENGTH         64
 
-#define CONFIG_LIST_PATH        "configs/cm_match.txt"
+#define PATH_CONFIG_MATCH        "configs/cm_match.txt"
 
 #define TRANSLATIONS            "cm_match.phrases"
 
@@ -27,85 +28,94 @@ public Plugin myinfo =
 
 #define VOTE_TIME               15
 
+enum struct Node
+{
+    char phrases[32];
+    ArrayList children;
+}
 
-Handle
-	g_hConfigList = null,
-	g_hConfigTitle = null
-;
+char g_szTargetConfig[MAX_CONFIG_NAME_LENGTH];
 
-char
-	g_sConfigName[CONFIG_NAME_MAX],
-	g_sConfigTitle[CONFIG_NAME_MAX]
-;
+
+ArrayList g_aConfigs = null;
+StringMap g_smConfigsByNames = null;
 
 /**
  * Called before OnPluginStart.
  */
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (GetEngineVersion() != Engine_Left4Dead2)
-	{
-		strcopy(error, err_max, "Plugin only supports Left 4 Dead 2.");
-		return APLRes_SilentFailure;
-	}
+    if (GetEngineVersion() != Engine_Left4Dead2)
+    {
+        strcopy(error, err_max, "Plugin only supports Left 4 Dead 2.");
+        return APLRes_SilentFailure;
+    }
 
-	return APLRes_Success;
+    return APLRes_Success;
 }
 
 public void OnPluginStart()
 {
-	g_hConfigList = CreateKeyValues("ConfigList");
+    g_aConfigs = new ArrayList(sizeof(Node));
+    g_smConfigsByNames = new StringMap();
 
-	LoadConfigList(g_hConfigList);
-	FillConfigTitle(g_hConfigList, g_hConfigTitle = CreateTrie());
+    char szPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_CONFIG_MATCH);
+    LoadConfigs(szPath, g_smConfigsByNames, g_aConfigs);
 
-	// Load translations.
-	LoadTranslations(TRANSLATIONS);
+    // Load translations.
+    LoadTranslations(TRANSLATIONS);
 
-	RegConsoleCmd("sm_match", Cmd_Match);
-	RegConsoleCmd("sm_rmatch", Cmd_ResetMatch);
+    RegConsoleCmd("sm_match", Cmd_Match);
+    RegConsoleCmd("sm_rmatch", Cmd_ResetMatch);
 }
 
-void LoadConfigList(Handle hConfigList)
+void LoadConfigs(char[] szPath, StringMap smConfigsByNames, ArrayList aConfigs)
 {
-	char sPath[PLATFORM_MAX_PATH ];
-	BuildPath(Path_SM, sPath, sizeof(sPath), CONFIG_LIST_PATH);
-
-	if (!FileExists(sPath)) {
-        SetFailState("Couldn't load %s", sPath);
+    if (!FileExists(szPath)) {
+        SetFailState("Couldn't load %s", szPath);
     }
 
- 	if (!FileToKeyValues(hConfigList, sPath)) {
-        SetFailState("Failed to parse keyvalues for %s", sPath);
+    KeyValues cvConfigs = CreateKeyValues("Configs");
+
+    if (!cvConfigs.ImportFromFile(szPath)) {
+        SetFailState("Failed to parse keyvalues for %s", szPath);
     }
-}
 
-void FillConfigTitle(Handle hConfigList, Handle hConfigTitle)
-{
-	if (KvGotoFirstSubKey(hConfigList, false))
-	{
-		char sCategory[64], sKey[CONFIG_NAME_MAX], sValue[CONFIG_NAME_MAX];
+    if (cvConfigs.GotoFirstSubKey(false))
+    {
+        char szCurrentCategory[64], sKey[MAX_CONFIG_NAME_LENGTH], sValue[MAX_CONFIG_TITLE_LENGTH];
+        Node node;
 
-		do
-		{
-			KvGetSectionName(hConfigList, sCategory, sizeof(sCategory));
+        do
+        {
+            cvConfigs.GetSectionName(szCurrentCategory, sizeof(szCurrentCategory));
 
-			KvRewind(hConfigList);
+            cvConfigs.Rewind();
 
-			if (KvJumpToKey(hConfigList, sCategory) && KvGotoFirstSubKey(hConfigList, false))
-			{
-				do
-				{
-					KvGetSectionName(hConfigList, sKey, sizeof(sKey));
-					KvGetString(hConfigList, "name", sValue, sizeof(sValue));
+            if (!cvConfigs.JumpToKey(szCurrentCategory) || !cvConfigs.GotoFirstSubKey(false)) {
+                continue;
+            }
 
-					SetTrieString(hConfigTitle, sKey, sValue);
-				} while (KvGotoNextKey(hConfigList, false));
+            strcopy(node.phrases, sizeof(node.phrases), szCurrentCategory);
+            node.children = new ArrayList(ByteCountToCells(MAX_CONFIG_NAME_LENGTH));
 
-				KvGoBack(hConfigList);
-			}
-		} while (KvGotoNextKey(hConfigList, false));
-	}
+            do
+            {
+                cvConfigs.GetSectionName(sKey, sizeof(sKey));
+                cvConfigs.GetString("name", sValue, sizeof(sValue));
+
+                smConfigsByNames.SetString(sKey, sValue);
+                node.children.PushString(sKey);
+            } while (cvConfigs.GotoNextKey(false));
+
+            aConfigs.PushArray(node);
+
+            cvConfigs.GoBack();
+        } while (cvConfigs.GotoNextKey(false));
+    }
+
+    delete cvConfigs;
 }
 
 /**
@@ -114,17 +124,13 @@ void FillConfigTitle(Handle hConfigList, Handle hConfigTitle)
  */
 Action Cmd_Match(int iClient, int args)
 {
-	if (!IsValidClient(iClient)) {
-		return Plugin_Continue;
-	}
+    if (!iClient || IsClientSpectator(iClient)) {
+        return Plugin_Continue;
+    }
 
-	if (IsClientSpectator(iClient)) {
-		return Plugin_Handled;
-	}
+    ShowMainMenu(iClient);
 
-	ShowCategoryMenu(iClient);
-
-	return Plugin_Handled;
+    return Plugin_Handled;
 }
 
 /**
@@ -133,161 +139,161 @@ Action Cmd_Match(int iClient, int args)
  */
 Action Cmd_ResetMatch(int iClient, int args)
 {
-	if (!IsValidClient(iClient)) {
-		return Plugin_Continue;
-	}
+    if (!iClient || IsClientSpectator(iClient)) {
+        return Plugin_Continue;
+    }
 
-	if (IsClientSpectator(iClient)) {
-		return Plugin_Handled;
-	}
+    if (!ConfigManager_IsConfigLoaded())
+    {
+        CPrintToChat(iClient, "%T%T", "TAG", iClient, "CONFIG_NOT_LOADED", iClient);
+        return Plugin_Handled;
+    }
 
-	if (!ConfigManager_IsConfigLoaded()) {
-		return Plugin_Handled;
-	}
+    RunVote(HandlerVoteMatchEnd, iClient);
 
-	RunVoteMatchEnd(iClient);
-
-	return Plugin_Handled;
+    return Plugin_Handled;
 }
 
 
-void ShowCategoryMenu(int iClient)
+void ShowMainMenu(int iClient)
 {
-	Menu hMenu = CreateMenu(HandlerCategoryMenu, MenuAction_Select|MenuAction_End);
+    Menu menu = CreateMenu(HandlerMainMenu, MenuAction_Select|MenuAction_End);
 
-	char sConfigTitle[64];
+    if (ConfigManager_IsConfigLoaded())
+    {
+        char szConfigName[MAX_CONFIG_NAME_LENGTH];
+        ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
 
-	if (ConfigManager_IsConfigLoaded())
-	{
-		char sConfigName[CONFIG_NAME_MAX];
-		ConfigManager_GetConfigName(sConfigName, sizeof(sConfigName));
-		
-		if (!GetTrieString(g_hConfigTitle, sConfigName, sConfigTitle, sizeof(sConfigTitle))) {
-			FormatEx(sConfigTitle, sizeof(sConfigTitle), "%T", "CONFIG_UNKNOWN", iClient);
-		}
-	}
+        char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
+        if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
+            FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
+        }
 
-	else {
-		FormatEx(sConfigTitle, sizeof(sConfigTitle), "%T", "CONFIG_NONE", iClient);
-	}
+        menu.SetTitle("%T", "MENU_MAIN_TITLE_EX", iClient, szConfigTitle);
+    }
 
-	SetMenuTitle(hMenu, "%T", "CATEGORY_MENU_TITLE", iClient, sConfigTitle);
+    else {
+        menu.SetTitle("%T", "MENU_MAIN_TITLE", iClient);
+    }
 
-	KvRewind(g_hConfigList);
+    Node node;
+    char szIdx[4];
+    for (int iIdx = 0; iIdx < g_aConfigs.Length; iIdx ++)
+    {
+        g_aConfigs.GetArray(iIdx, node);
 
-	if (KvGotoFirstSubKey(g_hConfigList, false))
-	{
-		char sBuffer[64];
+        IntToString(iIdx, szIdx, sizeof(szIdx));
 
-		do {
-			KvGetSectionName(g_hConfigList, sBuffer, sizeof(sBuffer));
-			AddMenuItem(hMenu, sBuffer, sBuffer);
-		} while (KvGotoNextKey(g_hConfigList, false));
-	}
+        menu.AddItem(szIdx, node.phrases);
+    }
 
-	DisplayMenu(hMenu, iClient, -1);
+    menu.Display(iClient, -1);
 }
 
 /**
  *
  */
-int HandlerCategoryMenu(Menu hMenu, MenuAction hAction, int iClient, int iItem)
+int HandlerMainMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
 {
-	switch(hAction)
-	{
-		case MenuAction_End: CloseHandle(hMenu);
+    switch(hAction)
+    {
+        case MenuAction_End: delete menu;
 
-		case MenuAction_Select:
-		{
-			char sCategory[64];
-			GetMenuItem(hMenu, iItem, sCategory, sizeof(sCategory));
+        case MenuAction_Select:
+        {
+            char szIdx[8];
+            menu.GetItem(iItem, szIdx, sizeof(szIdx));
 
-			KvRewind(g_hConfigList);
+            ShowCategoryMenu(iClient, StringToInt(szIdx));
+        }
+    }
 
-			if (KvJumpToKey(g_hConfigList, sCategory) && KvGotoFirstSubKey(g_hConfigList, false))
-			{
-				Menu hConfigMenu = CreateMenu(HandlerConfigMenu, MenuAction_Select|MenuAction_End);
-
-				char sConfigTitle[64];
-
-				if (ConfigManager_IsConfigLoaded())
-				{
-					char sConfigName[CONFIG_NAME_MAX];
-					ConfigManager_GetConfigName(sConfigName, sizeof(sConfigName));
-					
-					if (!GetTrieString(g_hConfigTitle, sConfigName, sConfigTitle, sizeof(sConfigTitle))) {
-						FormatEx(sConfigTitle, sizeof(sConfigTitle), "%T", "CONFIG_UNKNOWN", iClient);
-					}
-				}
-				
-				else {
-					FormatEx(sConfigTitle, sizeof(sConfigTitle), "%T", "CONFIG_NONE", iClient);
-				}
-
-				SetMenuTitle(hConfigMenu, "%T", "CONFIG_MENU_TITLE", iClient, sCategory, sConfigTitle);
-
-				char sTitle[64], sBuffer[64];
-
-				do {
-					KvGetSectionName(g_hConfigList, sTitle, sizeof(sTitle));
-					KvGetString(g_hConfigList, "name", sBuffer, sizeof(sBuffer));
-
-					AddMenuItem(hConfigMenu, sTitle, sBuffer);
-				} while (KvGotoNextKey(g_hConfigList, false));
-
-				DisplayMenu(hConfigMenu, iClient, -1);
-			}
-
-			else {
-				ShowCategoryMenu(iClient);
-			}
-		}
-	}
-
-	return 0;
+    return 0;
 }
 
-public int HandlerConfigMenu(Menu hMenu, MenuAction hAction, int iClient, int iItem)
+void ShowCategoryMenu(int iClient, int iCategoryIdx)
 {
-	switch(hAction)
-	{
-		case MenuAction_End: CloseHandle(hMenu);
+    Menu menu = CreateMenu(HandlerCategoryMenu, MenuAction_Select|MenuAction_End);
 
-		case MenuAction_Select:
-		{
-			GetMenuItem(hMenu, iItem, g_sConfigName, sizeof(g_sConfigName), _, g_sConfigTitle, sizeof(g_sConfigTitle));
+    char szConfigName[MAX_CONFIG_NAME_LENGTH];
+    char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
 
-			RunVoteMatchStart(iClient);
-		}
-	}
+    Node node;
+    g_aConfigs.GetArray(iCategoryIdx, node);
 
-	return 0;
+    if (ConfigManager_IsConfigLoaded())
+    {
+        ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
+
+        if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
+            FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
+        }
+
+        menu.SetTitle("%T", "MENU_CATEGORY_TITLE_EX", iClient, szConfigTitle);
+    }
+
+    else {
+        menu.SetTitle("%T", "MENU_CATEGORY_TITLE", iClient);
+    }
+
+    for (int iIdx = 0; iIdx < node.children.Length; iIdx ++)
+    {
+        node.children.GetString(iIdx, szConfigName, sizeof(szConfigName));
+
+        g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle));
+
+        menu.AddItem(szConfigName, szConfigTitle);
+    }
+
+    menu.Display(iClient, -1);
 }
 
-void RunVoteMatchStart(int iClient)
+public int HandlerCategoryMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
 {
-	if (!NativeVotes_IsNewVoteAllowed())
-	{
-		CPrintToChat(iClient, "%T%T", "TAG", iClient, "VOTE_COULDOWN", iClient, NativeVotes_CheckVoteDelay());
-		return;
-	}
+    switch(hAction)
+    {
+        case MenuAction_End: delete menu;
 
-	int iTotalPlayers;
-	int[] iPlayers = new int[MaxClients];
+        case MenuAction_Select:
+        {
+            char szTargetConfig[MAX_CONFIG_NAME_LENGTH];
+            menu.GetItem(iItem, szTargetConfig, sizeof(szTargetConfig));
 
-	for (int iPlayer = 1; iPlayer <= MaxClients; iPlayer ++)
-	{
-		if (!IsClientInGame(iPlayer) || IsFakeClient(iPlayer) || IsClientSpectator(iPlayer)) {
-			continue;
-		}
+            RunVote(HandlerVoteMatchStart, iClient, szTargetConfig);
+        }
+    }
 
-		iPlayers[iTotalPlayers++] = iPlayer;
-	}
+    return 0;
+}
 
-	NativeVote hVote = new NativeVote(HandlerVoteMatchStart, NativeVotesType_Custom_YesNo);
-	hVote.Initiator = iClient;
+NativeVote RunVote(NativeVotes_Handler hHandler, int iInitiator, char[] szTargetConfig = "")
+{
+    if (!NativeVotes_IsNewVoteAllowed())
+    {
+        CPrintToChat(iInitiator, "%T%T", "TAG", iInitiator, "VOTE_COULDOWN", iInitiator, NativeVotes_CheckVoteDelay());
+        return null;
+    }
 
-	hVote.DisplayVote(iPlayers, iTotalPlayers, VOTE_TIME);
+    strcopy(g_szTargetConfig, sizeof(g_szTargetConfig), szTargetConfig);
+
+    int iTotalPlayers = 0;
+    int[] iPlayers = new int[MaxClients];
+
+    for (int iPlayer = 1; iPlayer <= MaxClients; iPlayer ++)
+    {
+        if (!IsClientInGame(iPlayer) || IsFakeClient(iPlayer) || IsClientSpectator(iPlayer)) {
+            continue;
+        }
+
+        iPlayers[iTotalPlayers++] = iPlayer;
+    }
+
+    NativeVote hVote = new NativeVote(hHandler, NativeVotesType_Custom_YesNo);
+    hVote.Initiator = iInitiator;
+
+    hVote.DisplayVote(iPlayers, iTotalPlayers, VOTE_TIME);
+
+    return hVote;
 }
 
 /**
@@ -300,67 +306,45 @@ void RunVoteMatchStart(int iClient)
  */
 Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, int iParam2)
 {
-	switch (tAction)
-	{
-		case VoteAction_Display:
-		{
-			char sVoteDisplayMessage[128];
+    switch (tAction)
+    {
+        case VoteAction_Display:
+        {
+            char szConfigTitle[MAX_CONFIG_TITLE_LENGTH], sVoteDisplayMessage[128];
 
-			FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_START", iParam1, g_sConfigTitle);
+            g_smConfigsByNames.GetString(g_szTargetConfig, szConfigTitle, sizeof(szConfigTitle));
 
-			hVote.SetDetails(sVoteDisplayMessage);
+            FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_START", iParam1, szConfigTitle);
 
-			return Plugin_Changed;
-		}
+            hVote.SetDetails(sVoteDisplayMessage);
 
-		case VoteAction_Cancel: {
-			hVote.DisplayFail();
-		}
+            return Plugin_Changed;
+        }
 
-		case VoteAction_Finish:
-		{
-			if (iParam1 == NATIVEVOTES_VOTE_NO)
-			{
-				hVote.DisplayFail();
+        case VoteAction_Cancel: {
+            hVote.DisplayFail();
+        }
 
-				return Plugin_Continue;
-			}
+        case VoteAction_Finish:
+        {
+            if (iParam1 == NATIVEVOTES_VOTE_NO)
+            {
+                hVote.DisplayFail();
+                g_szTargetConfig[0] = '\0';
 
-			hVote.DisplayPass();
+                return Plugin_Continue;
+            }
 
-			ConfigManager_LoadConfig(g_sConfigName);
-		}
+            hVote.DisplayPass();
 
-		case VoteAction_End: hVote.Close();
-	}
+            ConfigManager_LoadConfig(g_szTargetConfig);
+            g_szTargetConfig[0] = '\0';
+        }
 
-	return Plugin_Continue;
-}
+        case VoteAction_End: hVote.Close();
+    }
 
-void RunVoteMatchEnd(int iClient)
-{
-	if (!NativeVotes_IsNewVoteAllowed())
-	{
-		CPrintToChat(iClient, "%T%T", "TAG", iClient, "VOTE_COULDOWN", iClient, NativeVotes_CheckVoteDelay());
-		return;
-	}
-
-	int iTotalPlayers;
-	int[] iPlayers = new int[MaxClients];
-
-	for (int iPlayer = 1; iPlayer <= MaxClients; iPlayer ++)
-	{
-		if (!IsClientInGame(iPlayer) || IsFakeClient(iPlayer) || IsClientSpectator(iPlayer)) {
-			continue;
-		}
-
-		iPlayers[iTotalPlayers++] = iPlayer;
-	}
-
-	NativeVote hVote = new NativeVote(HandlerVoteMatchEnd, NativeVotesType_Custom_YesNo);
-	hVote.Initiator = iClient;
-
-	hVote.DisplayVote(iPlayers, iTotalPlayers, VOTE_TIME);
+    return Plugin_Continue;
 }
 
 /**
@@ -373,62 +357,53 @@ void RunVoteMatchEnd(int iClient)
  */
 Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, int iParam2)
 {
-	switch (tAction)
-	{
-		case VoteAction_Display:
-		{
-			char sVoteDisplayMessage[128];
+    switch (tAction)
+    {
+        case VoteAction_Display:
+        {
+            char sVoteDisplayMessage[128];
 
-			char sConfigName[CONFIG_NAME_MAX];
-			ConfigManager_GetConfigName(sConfigName, sizeof(sConfigName));
-			
-			char sConfigTitle[64];
+            char szConfigName[MAX_CONFIG_NAME_LENGTH], szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
+            ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
 
-			if (!GetTrieString(g_hConfigTitle, sConfigName, sConfigTitle, sizeof(sConfigTitle))) {
-				FormatEx(sConfigTitle, sizeof(sConfigTitle), "%T", "CONFIG_UNKNOWN", iParam1);
-			}
+            if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
+                FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iParam1);
+            }
 
-			FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_END", iParam1, sConfigTitle);
+            FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_END", iParam1, szConfigTitle);
 
-			hVote.SetDetails(sVoteDisplayMessage);
+            hVote.SetDetails(sVoteDisplayMessage);
 
-			return Plugin_Changed;
-		}
+            return Plugin_Changed;
+        }
 
-		case VoteAction_Cancel: {
-			hVote.DisplayFail();
-		}
+        case VoteAction_Cancel: {
+            hVote.DisplayFail();
+        }
 
-		case VoteAction_Finish:
-		{
-			if (iParam1 == NATIVEVOTES_VOTE_NO)
-			{
-				hVote.DisplayFail();
+        case VoteAction_Finish:
+        {
+            if (iParam1 == NATIVEVOTES_VOTE_NO)
+            {
+                hVote.DisplayFail();
 
-				return Plugin_Continue;
-			}
+                return Plugin_Continue;
+            }
 
-			hVote.DisplayPass();
+            hVote.DisplayPass();
 
-			ConfigManager_UnloadConfig();
-		}
+            ConfigManager_UnloadConfig();
+        }
 
-		case VoteAction_End: hVote.Close();
-	}
+        case VoteAction_End: hVote.Close();
+    }
 
-	return Plugin_Continue;
-}
-
-/**
- *
- */
-bool IsValidClient(int iClient) {
-	return (iClient > 0 && iClient <= MaxClients);
+    return Plugin_Continue;
 }
 
 /**
  *
  */
 bool IsClientSpectator(int iClient) {
-	return (GetClientTeam(iClient) == TEAM_SPECTATE);
+    return (GetClientTeam(iClient) == TEAM_SPECTATE);
 }

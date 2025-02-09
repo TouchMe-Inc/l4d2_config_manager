@@ -2,7 +2,7 @@
 {
 	"TAG"
 	{
-		"en"			"<{green}Confogl Match{default}> "
+		"en"			"<{green}Config{default}> "
 	}
 
 	"CATEGORY_MENU_TITLE"
@@ -11,20 +11,36 @@
 		"en"			"Select category:\n(Active match: {1})"
 	}
 
-	"CONFIG_NONE"
+	"CONFIG_UNDEFINED"
 	{
-		"en"			"None"
+		"en"			"Undefined"
 	}
 
-	"CONFIG_UNKNOWN"
+	"CONFIG_NOT_LOADED"
 	{
-		"en"			"Unknown"
+		"en"			"Config not loaded"
 	}
 
-	"CONFIG_MENU_TITLE"
+	"MENU_MAIN_TITLE"
 	{
-		"#format"		"{1:s},{2:s}"
-		"en"			"Select a match from category {1}:\n(Active match: {2})"
+		"en"			"Select category:"
+	}
+
+	"MENU_MAIN_TITLE_EX"
+	{
+		"#format"		"{1:s}"
+		"en"			"Select category:\n(Active config: {1})"
+	}
+
+	"MENU_CATEGORY_TITLE"
+	{
+		"en"			"Select a config from category:"
+	}
+
+	"MENU_CATEGORY_TITLE_EX"
+	{
+		"#format"		"{1:s}"
+		"en"			"Select a config from category:\n(Active config: {1})"
 	}
 
 	"VOTE_COULDOWN"
@@ -36,12 +52,12 @@
 	"VOTE_MATCH_START"
 	{
 		"#format"		"{1:s}"
-		"en"			"Load config {1}"
+		"en"			"Load config: {1}"
 	}
 
 	"VOTE_MATCH_END"
 	{
 		"#format"		"{1:s}"
-		"en"			"Unload config {1}"
+		"en"			"Unload config: {1}"
 	}
 }
