@@ -329,16 +329,16 @@ Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, 
         {
             if (iParam1 == NATIVEVOTES_VOTE_NO)
             {
-                hVote.DisplayFail();
                 g_szTargetConfig[0] = '\0';
+                hVote.DisplayFail();
 
                 return Plugin_Continue;
             }
 
-            hVote.DisplayPass();
-
             ConfigManager_LoadConfig(g_szTargetConfig);
             g_szTargetConfig[0] = '\0';
+
+            hVote.DisplayPass();
         }
 
         case VoteAction_End: hVote.Close();

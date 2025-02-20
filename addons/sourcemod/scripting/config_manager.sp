@@ -131,7 +131,7 @@ int Native_LoadConfig(Handle plugin, int numParams)
         if (UnloadConfig())
         {
             DataPack hPack;
-            CreateDataTimer(0.1, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
+            CreateDataTimer(0.5, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
             hPack.WriteString(szConfigName);
         }
     }
@@ -290,6 +290,7 @@ bool LoadConfig(const char[] szConfigName)
 
     ServerCommand("sm plugins load_unlock");
     ServerCommand("exec %s", szPathToConfigLoadFile[strlen(PATH_TO_CFG_ABSOLUTE)]);
+    ServerExecute();
 
     strcopy(g_szConfigName,  sizeof(g_szConfigName), szConfigName);
 
@@ -311,6 +312,7 @@ bool UnloadConfig()
 
     ServerCommand("sm plugins load_unlock");
     ServerCommand("exec %s", szPathToConfigUnloadFile[strlen(PATH_TO_CFG_ABSOLUTE)]);
+    ServerExecute();
 
     ResetConVars();
     UnloadPlugins(g_smPluginWhiteList);

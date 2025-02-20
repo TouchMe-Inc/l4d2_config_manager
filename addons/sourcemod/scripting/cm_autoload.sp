@@ -69,22 +69,23 @@ void CvChange_Difficulty(ConVar convar, const char[] sOldDifficulty, const char[
     strcopy(g_sDifficulty, sizeof(g_sDifficulty), sDifficulty);
 }
 
-void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] sGamemode)
+void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] szGamemode)
 {
-    if (ConfigManager_IsConfigLoaded() && !g_bLoopFixed)
+    if (ConfigManager_IsConfigLoaded() && !g_bLoopFixed && IsEmptyServer())
     {
         g_bLoopFixed = true;
 
         char szGamemodeConfig[64];
-        bool bNeedConfig = GetTrieString(g_hGamemodeConfig, sGamemode, szGamemodeConfig, sizeof(szGamemodeConfig));
+        bool bNeedConfig = GetTrieString(g_hGamemodeConfig, szGamemode, szGamemodeConfig, sizeof(szGamemodeConfig));
 
         char szCurrentConfig[64]; ConfigManager_GetConfigName(szCurrentConfig, sizeof(szCurrentConfig));
 
         if (!bNeedConfig || !StrEqual(szGamemodeConfig, szCurrentConfig))
         {
-            strcopy(g_sNewGamemode, sizeof(g_sNewGamemode), sGamemode);
+            strcopy(g_sNewGamemode, sizeof(g_sNewGamemode), szGamemode);
+            
             ConfigManager_UnloadConfig();
-            CreateTimer(1.0, Timer_SetGamemodeAndDifficulty);
+            CreateTimer(1.0, Timer_SetGamemodeAndDifficulty, .flags = TIMER_FLAG_NO_MAPCHANGE);
         }
     }
 }
@@ -106,7 +107,7 @@ void LoadGamemodes(Handle hGamemodes)
         SetFailState("Couldn't load %s", sPath);
     }
 
-     if (!FileToKeyValues(hGamemodes, sPath)) {
+    if (!FileToKeyValues(hGamemodes, sPath)) {
         SetFailState("Failed to parse keyvalues for %s", sPath);
     }
 }
