@@ -16,11 +16,11 @@ public Plugin myinfo =
     url =         "https://github.com/TouchMe-Inc/l4d2_config_manager"
 }
 
-
+#define CONFIG_PATH        "configs/cm_autoload.txt"
 #define MAX_CONFIG_NAME_LENGTH         64
 #define MAX_CONFIG_TITLE_LENGTH         64
 
-#define PATH_CONFIG_MATCH        "configs/cm_match.txt"
+#define PATH_TO_CONFIG        "configs/cm_match.txt"
 
 #define TRANSLATIONS            "cm_match.phrases"
 
@@ -60,7 +60,7 @@ public void OnPluginStart()
     g_smConfigsByNames = new StringMap();
 
     char szPath[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_CONFIG_MATCH);
+    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_TO_CONFIG);
     LoadConfigs(szPath, g_smConfigsByNames, g_aConfigs);
 
     // Load translations.
@@ -195,7 +195,7 @@ void ShowMainMenu(int iClient)
  */
 int HandlerMainMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
 {
-    switch(hAction)
+    switch (hAction)
     {
         case MenuAction_End: delete menu;
 
@@ -250,7 +250,7 @@ void ShowCategoryMenu(int iClient, int iCategoryIdx)
 
 public int HandlerCategoryMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
 {
-    switch(hAction)
+    switch (hAction)
     {
         case MenuAction_End: delete menu;
 
@@ -321,9 +321,7 @@ Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, 
             return Plugin_Changed;
         }
 
-        case VoteAction_Cancel: {
-            hVote.DisplayFail();
-        }
+        case VoteAction_Cancel: hVote.DisplayFail();
 
         case VoteAction_Finish:
         {
@@ -377,9 +375,7 @@ Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, in
             return Plugin_Changed;
         }
 
-        case VoteAction_Cancel: {
-            hVote.DisplayFail();
-        }
+        case VoteAction_Cancel: hVote.DisplayFail();
 
         case VoteAction_Finish:
         {
