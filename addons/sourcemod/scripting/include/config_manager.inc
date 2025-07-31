@@ -3,9 +3,10 @@
 #endif
 #define _config_manager_included
 
+native void ConfigManager_BuildConfigPath(char szFullConfigPath[PLATFORM_MAX_PATH], const char[] szConfigPath);
 native bool ConfigManager_IsConfigLoaded();
-native void ConfigManager_GetConfigName(char[] sConfigName, int iLength);
-native void ConfigManager_LoadConfig(const char[] sConfigName);
+native void ConfigManager_GetConfigPath(char[] szConfigPath, int iMaxLength);
+native void ConfigManager_LoadConfig(const char[] szConfigPath);
 native void ConfigManager_UnloadConfig();
 
 forward void ConfigManager_OnLoadConfig();
@@ -25,8 +26,9 @@ public SharedPlugin __pl_config_manager =
 #if !defined REQUIRE_PLUGIN
 public void __pl_config_manager_SetNTVOptional()
 {
+	MarkNativeAsOptional("ConfigManager_BuildConfigPath")
 	MarkNativeAsOptional("ConfigManager_IsConfigLoaded");
-	MarkNativeAsOptional("ConfigManager_GetConfigName");
+	MarkNativeAsOptional("ConfigManager_GetConfigPath");
 	MarkNativeAsOptional("ConfigManager_LoadConfig");
 	MarkNativeAsOptional("ConfigManager_UnloadConfig");
 }
