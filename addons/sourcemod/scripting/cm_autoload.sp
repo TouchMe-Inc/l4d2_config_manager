@@ -16,15 +16,16 @@ public Plugin myinfo = {
 
 #define CONFIG_PATH        "configs/cm_autoload.txt"
 
+#define MAXLENGTH_CONFIG_PATH 128
 
 bool
     g_bInit = false,
-    g_bLoopFixed = false
+    g_bOnLoadLoopFix = false
 ;
 
 char
-    g_sNewGamemode[32],
-    g_sDifficulty[32]
+    g_szNewGamemode[32],
+    g_szDifficulty[32]
 ;
 
 Handle
@@ -54,36 +55,40 @@ public APLRes AskPluginLoad2(Handle myself, bool bLate, char[] sErr, int iErrLen
 
 public void OnPluginStart()
 {
-    LoadGamemodes(g_hGamemodes = CreateKeyValues("Gamemodes"));
+    g_cvDifficulty = FindConVar("z_difficulty");
+    g_cvGameMode = FindConVar("mp_gamemode");
+
+    g_hGamemodes = CreateKeyValues("Gamemodes");
     FillGamemodeConfig(g_hGamemodes, g_hGamemodeConfig = CreateTrie());
 
-    HookConVarChange((g_cvDifficulty = FindConVar("z_difficulty")), CvChange_Difficulty);
-    HookConVarChange((g_cvGameMode = FindConVar("mp_gamemode")), CvChange_GameMode);
+    HookConVarChange(g_cvDifficulty, CvChange_Difficulty);
+    HookConVarChange(g_cvGameMode, CvChange_GameMode);
 
     g_bInit = false;
-    g_bLoopFixed = false;
+    g_bOnLoadLoopFix = false;
 }
 
 
-void CvChange_Difficulty(ConVar convar, const char[] sOldDifficulty, const char[] sDifficulty) {
-    strcopy(g_sDifficulty, sizeof(g_sDifficulty), sDifficulty);
+void CvChange_Difficulty(ConVar convar, const char[] szOldDifficulty, const char[] szDifficulty) {
+    strcopy(g_szDifficulty, sizeof g_szDifficulty, szDifficulty);
 }
 
-void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] szGamemode)
+void CvChange_GameMode(ConVar convar, const char[] szOldGamemode, const char[] szGamemode)
 {
-    if (ConfigManager_IsConfigLoaded() && !g_bLoopFixed && IsEmptyServer())
+    if (!g_bOnLoadLoopFix && ConfigManager_IsConfigLoaded() && IsEmptyServer())
     {
-        g_bLoopFixed = true;
+        g_bOnLoadLoopFix = true;
 
-        char szGamemodeConfig[64];
-        bool bNeedConfig = GetTrieString(g_hGamemodeConfig, szGamemode, szGamemodeConfig, sizeof(szGamemodeConfig));
+        char szGamemodePath[MAXLENGTH_CONFIG_PATH];
+        bool bPreloadByGamemode = GetTrieString(g_hGamemodeConfig, szGamemode, szGamemodePath, sizeof szGamemodePath);
 
-        char szCurrentConfig[64]; ConfigManager_GetConfigName(szCurrentConfig, sizeof(szCurrentConfig));
+        char szCurrentConfigPath[MAXLENGTH_CONFIG_PATH];
+        ConfigManager_GetConfigPath(szCurrentConfigPath, sizeof szCurrentConfigPath);
 
-        if (!bNeedConfig || !StrEqual(szGamemodeConfig, szCurrentConfig))
+        if (!bPreloadByGamemode || !StrEqual(szGamemodePath, szCurrentConfigPath))
         {
-            strcopy(g_sNewGamemode, sizeof(g_sNewGamemode), szGamemode);
-            
+            strcopy(g_szNewGamemode, sizeof g_szNewGamemode, szGamemode);
+
             ConfigManager_UnloadConfig();
             CreateTimer(1.0, Timer_SetGamemodeAndDifficulty, .flags = TIMER_FLAG_NO_MAPCHANGE);
         }
@@ -92,38 +97,35 @@ void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] sz
 
 Action Timer_SetGamemodeAndDifficulty(Handle hTimer)
 {
-    SetConVarString(g_cvGameMode, g_sNewGamemode, .notify = false);
-    SetConVarString(g_cvDifficulty, g_sDifficulty, .notify = false);
+    SetConVarString(g_cvGameMode, g_szNewGamemode, .notify = false);
+    SetConVarString(g_cvDifficulty, g_szDifficulty, .notify = false);
 
     return Plugin_Stop;
 }
 
-void LoadGamemodes(Handle hGamemodes)
-{
-    char sPath[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, sPath, sizeof(sPath), CONFIG_PATH);
-
-    if (!FileExists(sPath)) {
-        SetFailState("Couldn't load %s", sPath);
-    }
-
-    if (!FileToKeyValues(hGamemodes, sPath)) {
-        SetFailState("Failed to parse keyvalues for %s", sPath);
-    }
-}
-
 void FillGamemodeConfig(Handle hGamemodes, Handle hGamemodeConfig)
 {
+    char szPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPath, sizeof szPath, CONFIG_PATH);
+
+    if (!FileExists(szPath)) {
+        SetFailState("Couldn't load %s", szPath);
+    }
+
+    if (!FileToKeyValues(hGamemodes, szPath)) {
+        SetFailState("Failed to parse keyvalues for %s", szPath);
+    }
+
     if (KvGotoFirstSubKey(hGamemodes, false))
     {
-        char sKey[32], sValue[64];
+        char szKey[32], szValue[MAXLENGTH_CONFIG_PATH];
 
         do
         {
-            KvGetSectionName(hGamemodes, sKey, sizeof(sKey));
-            KvGetString(hGamemodes, "exec", sValue, sizeof(sValue));
+            KvGetSectionName(hGamemodes, szKey, sizeof szKey);
+            KvGetString(hGamemodes, "exec", szValue, sizeof szValue);
 
-            SetTrieString(hGamemodeConfig, sKey, sValue);
+            SetTrieString(hGamemodeConfig, szKey, szValue);
         } while (KvGotoNextKey(hGamemodes, false));
     }
 }
@@ -135,20 +137,20 @@ public void OnAllPluginsLoaded()
     }
 
     g_bInit = true;
-    g_bLoopFixed = false;
+    g_bOnLoadLoopFix = false;
 
     if (!ConfigManager_IsConfigLoaded() && IsEmptyServer())
     {
-        char szNeedConfig[64];
+        char szDefaultPath[MAXLENGTH_CONFIG_PATH];
 
-        if (GetTrieString(g_hGamemodeConfig, "default", szNeedConfig, sizeof(szNeedConfig))) {
-            ConfigManager_LoadConfig(szNeedConfig);
+        if (GetTrieString(g_hGamemodeConfig, "default", szDefaultPath, sizeof szDefaultPath)) {
+            ConfigManager_LoadConfig(szDefaultPath);
         }
     }
 }
 
 public void ConfigManager_OnLoadConfig() {
-    g_bLoopFixed = false;
+    g_bOnLoadLoopFix = false;
 }
 
 bool IsEmptyServer()

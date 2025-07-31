@@ -1,63 +1,73 @@
 "Phrases"
 {
-	"TAG"
-	{
-		"en"			"<{green}Config{default}> "
-	}
+    "TAG"
+    {
+        "en"            "<{green}Config{default}> "
+    }
 
-	"CATEGORY_MENU_TITLE"
-	{
-		"#format"		"{1:s}"
-		"en"			"Select category:\n(Active match: {1})"
-	}
+    "CONFIG_NOT_LOADED"
+    {
+        "en"            "Config not loaded"
+    }
 
-	"CONFIG_UNDEFINED"
-	{
-		"en"			"Undefined"
-	}
+    "DENY_FOR_SPECTATOR"
+    {
+        "en"            "Action not available to spectators"
+    }
 
-	"CONFIG_NOT_LOADED"
-	{
-		"en"			"Config not loaded"
-	}
+    "ALIAS_NOT_FOUND"
+    {
+        "#format"       "{1:s}"
+        "en"            "Alias \"{1}\" not found"
+    }
 
-	"MENU_MAIN_TITLE"
-	{
-		"en"			"Select category:"
-	}
+    "MENU_MAIN_TITLE"
+    {
+        "en"            "Select category:\n "
+    }
 
-	"MENU_MAIN_TITLE_EX"
-	{
-		"#format"		"{1:s}"
-		"en"			"Select category:\n(Active config: {1})"
-	}
+    "MENU_MAIN_TITLE_WITH_CONFIG"
+    {
+        "#format"       "{1:s}"
+        "en"            "Select category:\n(Active config: {1})\n "
+    }
 
-	"MENU_CATEGORY_TITLE"
-	{
-		"en"			"Select a config from category:"
-	}
+    "MENU_MAIN_TITLE_WITH_UNKNOWN"
+    {
+        "en"            "Select category:\n(Active config: Unknown)\n "
+    }
 
-	"MENU_CATEGORY_TITLE_EX"
-	{
-		"#format"		"{1:s}"
-		"en"			"Select a config from category:\n(Active config: {1})"
-	}
+    "MENU_INFO_TITLE"
+    {
+        "#format"       "{1:s},{2:s},{3:s},{4:s}"
+        "en"            "Name: {1}\nAlias: {2}\nVersion: {3}\nAuthor: {4}\n "
+    }
 
-	"VOTE_COULDOWN"
-	{
-		"#format"		"{1:d}"
-		"en"			"A vote cannot be called at this moment, try again in a {1} second"
-	}
+    "PRINT_DESCRIPTION"
+    {
+        "en"            "Print description"
+    }
 
-	"VOTE_MATCH_START"
-	{
-		"#format"		"{1:s}"
-		"en"			"Load config: {1}"
-	}
+    "RUN_VOTE"
+    {
+        "en"            "Run vote"
+    }
 
-	"VOTE_MATCH_END"
-	{
-		"#format"		"{1:s}"
-		"en"			"Unload config: {1}"
-	}
+    "VOTE_COULDOWN"
+    {
+        "#format"       "{1:d}"
+        "en"            "A vote cannot be called at this moment, try again in a {1} second"
+    }
+
+    "VOTE_MATCH_START"
+    {
+        "#format"       "{1:s}"
+        "en"            "Load config: {1}"
+    }
+
+    "VOTE_MATCH_END"
+    {
+        "#format"       "{1:s}"
+        "en"            "Unload config: {1}"
+    }
 }

@@ -1,0 +1,73 @@
+"Phrases"
+{
+    "TAG"
+    {
+        "ru"            "<{green}Config{default}> "
+    }
+
+    "CONFIG_NOT_LOADED"
+    {
+        "ru"            "Конфиг не загружен"
+    }
+
+    "DENY_FOR_SPECTATOR"
+    {
+        "ru"            "Действие недоступно для зрителей"
+    }
+
+    "ALIAS_NOT_FOUND"
+    {
+        "#format"       "{1:s}"
+        "ru"            "Псевдоним \"{1}\" не найден"
+    }
+
+    "MENU_MAIN_TITLE"
+    {
+        "ru"            "Выберите категорию:\n "
+    }
+
+    "MENU_MAIN_TITLE_WITH_CONFIG"
+    {
+        "#format"       "{1:s}"
+        "ru"            "Выберите категорию:\n(Активный конфиг: {1})\n "
+    }
+
+    "MENU_MAIN_TITLE_WITH_UNKNOWN"
+    {
+        "ru"            "Выберите категорию:\n(Активный конфиг: Неизвестно)\n "
+    }
+
+    "MENU_INFO_TITLE"
+    {
+        "#format"       "{1:s},{2:s},{3:s},{4:s}"
+        "ru"            "Название: {1}\nПсевдоним: {2}\nВерсия: {3}\nАвтор: {4}\n "
+    }
+
+    "PRINT_DESCRIPTION"
+    {
+        "ru"            "Показать описание"
+    }
+
+    "RUN_VOTE"
+    {
+        "ru"            "Начать голосование"
+    }
+
+    "VOTE_COULDOWN"
+    {
+        "#format"       "{1:d}"
+        "ru"            "Голосование сейчас недоступно, попробуйте через {1} с"
+    }
+
+    "VOTE_MATCH_START"
+    {
+        "#format"       "{1:s}"
+        "ru"            "Загрузить конфиг: {1}"
+    }
+
+    "VOTE_MATCH_END"
+    {
+        "#format"       "{1:s}"
+        "ru"            "Выгрузить конфиг: {1}"
+    }
+}

@@ -1,9 +1,43 @@
 "ConfigList"
 {
-	"Custom Configs"
+	"category"
 	{
-		"touchme_versus_t2" {
-			"name" "Versus | T2"
+		"name" "Versus Configs"
+		"items"
+		{
+			"item"
+			{
+				"name" "versus_t1"
+			}
+
+			"item"
+			{
+				"name" "versus_t2"
+			}
+
+			"category"
+			{
+				"name" "SubCategory Configs"
+				"items"
+				{
+					"item"
+					{
+						"name" "versus_t3"
+					}
+				}
+			}
+		}
+	}
+
+	"category"
+	{
+		"name" "Coop Configs"
+		"items"
+		{
+			"item"
+			{
+				"name" "coop_t1"
+			}
 		}
 	}
 }

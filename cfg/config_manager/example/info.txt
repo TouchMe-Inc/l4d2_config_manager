@@ -1,0 +1,18 @@
+ConfigInfo
+{
+    "name"    "1v1 ZoneHunters"
+    "alias"   "zh1v1"
+    "version" "v1.0"
+    "author"  "SirPlease (port by TouchMe)"
+    "description"
+    {
+        "space" " "
+        "info" "  {green}About ZoneHunters:"
+        "info" "    ├ Rebalanced weapon system focusing only on Tier 1 weapons"
+        "info" "    ├ Modified scoring system that rewards both survival and efficiency"
+        "info" "    ├ Only {olive}hunters{default}"
+        "info" "    ├ Altered Special Infected Damage and Behavior"
+        "info" "    └ Removal of all Tier 2 weapons for better gameplay balance"
+        "space" " "
+    }
+}

@@ -29,10 +29,11 @@ public Plugin myinfo =
 /*
  * String limit.
  */
-#define CONFIG_NAME_MAX         64
-#define CVAR_NAME_MAX           64
-#define CVAR_VALUE_MAX          128
-#define PLUGIN_NAME_MAX         128
+#define MAXLENGTH_MAP_NAME      32
+#define MAXLENGTH_CONFIG_PATH         128
+#define MAXLENGTH_CVAR_NAME     64
+#define MAXLENGTH_CVAR_VALUE    128
+#define MAXLENGTH_PLUGIN_NAME   128
 
 
 StringMap
@@ -47,7 +48,7 @@ Handle
 
 char PATH_TO_CFG_ABSOLUTE[PLATFORM_MAX_PATH];
 
-char g_szConfigName[CONFIG_NAME_MAX];
+char g_szConfigPath[MAXLENGTH_CONFIG_PATH];
 
 bool g_bConVarHookIgnore = false;
 
@@ -99,8 +100,9 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     g_hFwdOnLoadConfig   = CreateGlobalForward("ConfigManager_OnLoadConfig", ET_Ignore);
     g_hFwdOnUnloadConfig = CreateGlobalForward("ConfigManager_OnUnloadConfig", ET_Ignore);
 
+    CreateNative("ConfigManager_BuildConfigPath", Native_BuildConfigPath);
     CreateNative("ConfigManager_IsConfigLoaded", Native_IsConfigLoaded);
-    CreateNative("ConfigManager_GetConfigName", Native_GetConfigName);
+    CreateNative("ConfigManager_GetConfigPath", Native_GetConfigPath);
     CreateNative("ConfigManager_LoadConfig", Native_LoadConfig);
     CreateNative("ConfigManager_UnloadConfig", Native_UnloadConfig);
 
@@ -109,20 +111,33 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     return APLRes_Success;
 }
 
+int Native_BuildConfigPath(Handle plugin, int numParams)
+{
+    char szConfigName[MAXLENGTH_CONFIG_PATH];
+    GetNativeString(2, szConfigName, sizeof(szConfigName));
+
+    char szConfigPath[PLATFORM_MAX_PATH];
+    BuildConfigPath(szConfigPath, szConfigName);
+
+    SetNativeString(1, szConfigPath, sizeof(szConfigPath));
+
+    return 1;
+}
+
 int Native_IsConfigLoaded(Handle plugin, int numParams) {
     return IsConfigLoaded();
 }
 
-int Native_GetConfigName(Handle plugin, int numParams)
+int Native_GetConfigPath(Handle plugin, int numParams)
 {
-    SetNativeString(1, g_szConfigName, GetNativeCell(2), true);
+    SetNativeString(1, g_szConfigPath, GetNativeCell(2), true);
 
     return 1;
 }
 
 int Native_LoadConfig(Handle plugin, int numParams)
 {
-    char szConfigName[CONFIG_NAME_MAX];
+    char szConfigName[MAXLENGTH_CONFIG_PATH];
 
     GetNativeString(1, szConfigName, sizeof(szConfigName));
 
@@ -131,7 +146,7 @@ int Native_LoadConfig(Handle plugin, int numParams)
         if (UnloadConfig())
         {
             DataPack hPack;
-            CreateDataTimer(0.5, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
+            CreateDataTimer(1.0, Timer_LoadConfig, hPack, .flags = TIMER_FLAG_NO_MAPCHANGE);
             hPack.WriteString(szConfigName);
         }
     }
@@ -179,18 +194,18 @@ Action Cmd_AddCvar(int iArgs)
         return Plugin_Handled;
     }
 
-    char szConVarName[CVAR_NAME_MAX]; GetCmdArg(1, szConVarName, sizeof(szConVarName));
-    char szConVarValue[CVAR_VALUE_MAX]; GetCmdArg(2, szConVarValue, sizeof(szConVarValue));
+    char szConVarName[MAXLENGTH_CVAR_NAME]; GetCmdArg(1, szConVarName, sizeof(szConVarName));
+    char szConVarValue[MAXLENGTH_CVAR_VALUE]; GetCmdArg(2, szConVarValue, sizeof(szConVarValue));
 
-    if (strlen(szConVarName) >= CVAR_NAME_MAX)
+    if (strlen(szConVarName) >= MAXLENGTH_CVAR_NAME)
     {
-        LogError("ConVar name \"%s\" is longer than max length \"%d\"", szConVarName, CVAR_NAME_MAX);
+        LogError("ConVar name \"%s\" is longer than max length \"%d\"", szConVarName, MAXLENGTH_CVAR_NAME);
         return Plugin_Handled;
     }
 
-    if (strlen(szConVarValue) >= CVAR_VALUE_MAX)
+    if (strlen(szConVarValue) >= MAXLENGTH_CVAR_VALUE)
     {
-        LogError("ConVar \"%s\" has value \"%s\" is longer than max length \"%d\"", szConVarName, szConVarValue, CVAR_VALUE_MAX);
+        LogError("ConVar \"%s\" has value \"%s\" is longer than max length \"%d\"", szConVarName, szConVarValue, MAXLENGTH_CVAR_VALUE);
         return Plugin_Handled;
     }
 
@@ -207,7 +222,7 @@ Action Cmd_AddCvar(int iArgs)
         return Plugin_Handled;
     }
 
-    char szConVarOldValue[CVAR_VALUE_MAX];
+    char szConVarOldValue[MAXLENGTH_CVAR_VALUE];
     GetConVarString(convar, szConVarOldValue, sizeof(szConVarOldValue));
 
     SetConVarStringSilence(convar, szConVarValue);
@@ -227,7 +242,7 @@ Action Cmd_DeleteCvar(int iArgs)
         return Plugin_Handled;
     }
 
-    char szConVarName[CVAR_NAME_MAX]; GetCmdArg(1, szConVarName, sizeof(szConVarName));
+    char szConVarName[MAXLENGTH_CVAR_NAME]; GetCmdArg(1, szConVarName, sizeof(szConVarName));
 
     if (!g_smUpdatedConVars.ContainsKey(szConVarName))
     {
@@ -242,7 +257,7 @@ Action Cmd_DeleteCvar(int iArgs)
         return Plugin_Handled;
     }
 
-    char szConVarOldValue[CVAR_VALUE_MAX];
+    char szConVarOldValue[MAXLENGTH_CVAR_VALUE];
     g_smUpdatedConVars.GetString(szConVarName, szConVarOldValue, sizeof(szConVarOldValue));
 
     UnhookConVarChange(convar, OnConVarChanged);
@@ -273,14 +288,19 @@ public void OnConVarChanged(ConVar convar, const char[] sOldValue, const char[] 
     g_bConVarHookIgnore = false;
 }
 
+void BuildConfigPath(char szConfigPath[PLATFORM_MAX_PATH], const char[] szConfigName) {
+    BuildPath(Path_SM, szConfigPath, sizeof(szConfigPath), "%s%s/%s", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, szConfigName);
+}
+
 bool IsConfigLoaded() {
-    return (g_szConfigName[0] != '\0');
+    return (g_szConfigPath[0] != '\0');
 }
 
 bool LoadConfig(const char[] szConfigName)
 {
     char szPathToConfigLoadFile[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPathToConfigLoadFile, sizeof(szPathToConfigLoadFile), "%s/%s/%s/config_load.cfg", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, szConfigName);
+    BuildConfigPath(szPathToConfigLoadFile, szConfigName);
+    Format(szPathToConfigLoadFile, sizeof(szPathToConfigLoadFile), "%s/config_load.cfg", szPathToConfigLoadFile);
 
     if (!FileExists(szPathToConfigLoadFile))
     {
@@ -292,7 +312,7 @@ bool LoadConfig(const char[] szConfigName)
     ServerCommand("exec %s", szPathToConfigLoadFile[strlen(PATH_TO_CFG_ABSOLUTE)]);
     ServerExecute();
 
-    strcopy(g_szConfigName,  sizeof(g_szConfigName), szConfigName);
+    strcopy(g_szConfigPath,  sizeof(g_szConfigPath), szConfigName);
 
     return true;
 }
@@ -300,15 +320,16 @@ bool LoadConfig(const char[] szConfigName)
 bool UnloadConfig()
 {
     char szPathToConfigUnloadFile[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPathToConfigUnloadFile, sizeof(szPathToConfigUnloadFile), "%s/%s/%s/config_unload.cfg", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, g_szConfigName);
+    BuildConfigPath(szPathToConfigUnloadFile, g_szConfigPath);
+    Format(szPathToConfigUnloadFile, sizeof(szPathToConfigUnloadFile), "%s/config_unload.cfg", szPathToConfigUnloadFile);
 
     if (!FileExists(szPathToConfigUnloadFile))
     {
-        LogError("Failed to unload configuration \"%s\": File \"%s\" not found", g_szConfigName, szPathToConfigUnloadFile);
+        LogError("Failed to unload configuration \"%s\": File \"%s\" not found", g_szConfigPath, szPathToConfigUnloadFile);
         return false;
     }
 
-    g_szConfigName[0] = '\0';
+    g_szConfigPath[0] = '\0';
 
     ServerCommand("sm plugins load_unlock");
     ServerCommand("exec %s", szPathToConfigUnloadFile[strlen(PATH_TO_CFG_ABSOLUTE)]);
@@ -322,7 +343,7 @@ bool UnloadConfig()
 
 Action Timer_LoadConfig(Handle hTimer, Handle hPack)
 {
-    char szConfigName[CONFIG_NAME_MAX];
+    char szConfigName[MAXLENGTH_CONFIG_PATH];
 
     ResetPack(hPack);
     ReadPackString(hPack, szConfigName, sizeof(szConfigName));
@@ -353,8 +374,8 @@ void ResetConVars()
 {
     StringMapSnapshot hSnapshot = g_smUpdatedConVars.Snapshot();
 
-    char szConVarName[CVAR_NAME_MAX];
-    char szConVarOldValue[CVAR_VALUE_MAX];
+    char szConVarName[MAXLENGTH_CVAR_NAME];
+    char szConVarOldValue[MAXLENGTH_CVAR_VALUE];
     for (int iIndex = hSnapshot.Length - 1; iIndex >= 0; iIndex--)
     {
         hSnapshot.GetKey(iIndex, szConVarName, sizeof(szConVarName));
@@ -384,7 +405,7 @@ void GetPluginWhitelist(StringMap smPluginWhiteList)
         return;
     }
 
-    char szPluginName[PLUGIN_NAME_MAX];
+    char szPluginName[MAXLENGTH_PLUGIN_NAME];
     FileType type;
     while (ReadDirEntry(dir, szPluginName, sizeof(szPluginName), type))
     {
@@ -442,7 +463,7 @@ void SetConVarStringSilence(ConVar convar, const char[] sValue)
 
 void RestartMap()
 {
-    char szCurrentMap[32]; GetCurrentMap(szCurrentMap, sizeof(szCurrentMap));
+    char szCurrentMap[MAXLENGTH_MAP_NAME]; GetCurrentMap(szCurrentMap, sizeof(szCurrentMap));
 
     if (g_bChangeLevelAvailable) {
         L4D2_ChangeLevel(szCurrentMap);
