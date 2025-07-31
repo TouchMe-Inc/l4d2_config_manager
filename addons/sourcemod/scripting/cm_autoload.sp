@@ -23,8 +23,8 @@ bool
 ;
 
 char
-    g_sNewGamemode[32],
-    g_sDifficulty[32]
+    g_szNewGamemode[32],
+    g_szDifficulty[32]
 ;
 
 Handle
@@ -66,7 +66,7 @@ public void OnPluginStart()
 
 
 void CvChange_Difficulty(ConVar convar, const char[] sOldDifficulty, const char[] sDifficulty) {
-    strcopy(g_sDifficulty, sizeof(g_sDifficulty), sDifficulty);
+    strcopy(g_szDifficulty, sizeof(g_szDifficulty), sDifficulty);
 }
 
 void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] szGamemode)
@@ -75,14 +75,14 @@ void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] sz
     {
         g_bLoopFixed = true;
 
-        char szGamemodeConfig[64];
+        char szGamemodeConfig[128];
         bool bNeedConfig = GetTrieString(g_hGamemodeConfig, szGamemode, szGamemodeConfig, sizeof(szGamemodeConfig));
 
-        char szCurrentConfig[64]; ConfigManager_GetConfigName(szCurrentConfig, sizeof(szCurrentConfig));
+        char szCurrentConfig[128]; ConfigManager_GetConfigPath(szCurrentConfig, sizeof(szCurrentConfig));
 
         if (!bNeedConfig || !StrEqual(szGamemodeConfig, szCurrentConfig))
         {
-            strcopy(g_sNewGamemode, sizeof(g_sNewGamemode), szGamemode);
+            strcopy(g_szNewGamemode, sizeof(g_szNewGamemode), szGamemode);
             
             ConfigManager_UnloadConfig();
             CreateTimer(1.0, Timer_SetGamemodeAndDifficulty, .flags = TIMER_FLAG_NO_MAPCHANGE);
@@ -92,8 +92,8 @@ void CvChange_GameMode(ConVar convar, const char[] sOldGamemode, const char[] sz
 
 Action Timer_SetGamemodeAndDifficulty(Handle hTimer)
 {
-    SetConVarString(g_cvGameMode, g_sNewGamemode, .notify = false);
-    SetConVarString(g_cvDifficulty, g_sDifficulty, .notify = false);
+    SetConVarString(g_cvGameMode, g_szNewGamemode, .notify = false);
+    SetConVarString(g_cvDifficulty, g_szDifficulty, .notify = false);
 
     return Plugin_Stop;
 }

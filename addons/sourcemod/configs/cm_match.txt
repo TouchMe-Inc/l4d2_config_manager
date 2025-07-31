@@ -1,9 +1,53 @@
 "ConfigList"
 {
-	"Custom Configs"
+	"category"
 	{
-		"touchme_versus_t2" {
-			"name" "Versus | T2"
+		"name" "TouchMe Configs"
+		"items"
+		{
+			"item"
+			{
+				"name" "touchme_versus_t1"
+			}
+
+			"item"
+			{
+				"name" "touchme_versus_t2"
+			}
+
+			"item"
+			{
+				"name" "touchme_versusfly_t1"
+			}
+
+			"item"
+			{
+				"name" "touchme_versusfly_t2"
+			}
+
+			"category"
+			{
+				"name" "Versus Configs"
+				"items"
+				{
+					"item"
+					{
+						"name" "versus_t1"
+					}
+				}
+			}
+		}
+	}
+
+	"category"
+	{
+		"name" "Versus Configs"
+		"items"
+		{
+			"item"
+			{
+				"name" "versus_t1"
+			}
 		}
 	}
 }
