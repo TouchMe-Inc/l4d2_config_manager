@@ -2,16 +2,16 @@
 {
 	"default"
 	{
-		"exec" "touchme_versus_t2"
+		"exec" "example"
 	}
 
 	"versus"
 	{
-		"exec" "touchme_versus_t2"
+		"exec" "example"
 	}
 
 	"mutation12"
 	{
-		"exec" "touchme_versus_t2"
+		"exec" "example"
 	}
 }
