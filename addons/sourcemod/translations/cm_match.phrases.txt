@@ -5,42 +5,46 @@
 		"en"			"<{green}Config{default}> "
 	}
 
-	"CATEGORY_MENU_TITLE"
-	{
-		"#format"		"{1:s}"
-		"en"			"Select category:\n(Active match: {1})"
-	}
-
-	"CONFIG_UNDEFINED"
-	{
-		"en"			"Undefined"
-	}
-
 	"CONFIG_NOT_LOADED"
 	{
 		"en"			"Config not loaded"
 	}
 
+	"DENY_FOR_SPECTATOR"
+	{
+		"en"			"Action not available to spectators"
+	}
+
 	"MENU_MAIN_TITLE"
 	{
-		"en"			"Select category:"
+		"en"			"Select category:\n "
 	}
 
-	"MENU_MAIN_TITLE_EX"
+	"MENU_MAIN_TITLE_WITH_CONFIG"
 	{
 		"#format"		"{1:s}"
-		"en"			"Select category:\n(Active config: {1})"
+		"en"			"Select category:\n(Active config: {1})\n "
 	}
 
-	"MENU_CATEGORY_TITLE"
+	"MENU_MAIN_TITLE_WITH_UNKNOWN"
 	{
-		"en"			"Select a config from category:"
+		"en"			"Select category:\n(Active config: Unknown)\n "
 	}
 
-	"MENU_CATEGORY_TITLE_EX"
+	"MENU_INFO_TITLE"
 	{
-		"#format"		"{1:s}"
-		"en"			"Select a config from category:\n(Active config: {1})"
+		"#format"		"{1:s},{2:s},{3:s},{4:s}"
+		"en"			"Name: {1}\nAlias: {2}\nVersion: {3}\nAuthor: {4}\n "
+	}
+
+	"PRINT_DESCRIPTION"
+	{
+		"en"            "Print description"
+	}
+
+	"RUN_VOTE"
+	{
+		"en"            "Run vote"
 	}
 
 	"VOTE_COULDOWN"
