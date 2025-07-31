@@ -17,28 +17,57 @@ public Plugin myinfo =
 }
 
 
-#define MAX_CONFIG_NAME_LENGTH         64
-#define MAX_CONFIG_TITLE_LENGTH         64
-
-#define PATH_CONFIG_MATCH        "configs/cm_match.txt"
+#define PATH_TO_CONFIG          "configs/cm_match.txt"
 
 #define TRANSLATIONS            "cm_match.phrases"
 
+/*
+ * String size limits.
+ */
+#define MAXLENGTH_NODE_KEY      32
+#define MAXLENGTH_NODE_VALUE    128
+
+#define MAXLENGTH_CONFIG_PATH   128
+#define MAXLENGTH_CONFIG_NAME   64
+#define MAXLENGTH_CONFIG_ALIAS  16
+#define MAXLENGTH_CONFIG_VERSION 8
+#define MAXLENGTH_CONFIG_AUTHOR 32
+
+#define MAXLENGTH_CHAT_MESSAGE  256
+
+/*
+ * Votes.
+ */
+#define VOTE_TIME               12
+
+/*
+ * Teams.
+ */
 #define TEAM_SPECTATE           1
 
-#define VOTE_TIME               15
-
-enum struct Node
+enum struct ConfigInfo
 {
-    char phrases[32];
+    char name[MAXLENGTH_CONFIG_NAME];
+    char alias[MAXLENGTH_CONFIG_ALIAS];
+    char version[MAXLENGTH_CONFIG_VERSION];
+    char author[MAXLENGTH_CONFIG_AUTHOR];
+    ArrayList description;
+}
+
+enum struct NodeItem
+{
+    char key[MAXLENGTH_NODE_KEY];
+    char value[MAXLENGTH_NODE_VALUE];
     ArrayList children;
 }
 
-char g_szTargetConfig[MAX_CONFIG_NAME_LENGTH];
+NodeItem g_aActiveNode[MAXPLAYERS + 1];
+NodeItem g_eMenu;
 
+StringMap g_smConfigInfo = null;
 
-ArrayList g_aConfigs = null;
-StringMap g_smConfigsByNames = null;
+char g_szTargetConfig[PLATFORM_MAX_PATH];
+
 
 /**
  * Called before OnPluginStart.
@@ -56,90 +85,81 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
-    g_aConfigs = new ArrayList(sizeof(Node));
-    g_smConfigsByNames = new StringMap();
-
-    char szPath[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_CONFIG_MATCH);
-    LoadConfigs(szPath, g_smConfigsByNames, g_aConfigs);
-
     // Load translations.
     LoadTranslations(TRANSLATIONS);
 
     RegConsoleCmd("sm_match", Cmd_Match);
     RegConsoleCmd("sm_rmatch", Cmd_ResetMatch);
+
+    g_smConfigInfo = new StringMap();
+
+    char szPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_TO_CONFIG);
+    BuildMenu(szPath, g_eMenu);
+
+    PushConfigInfoFromMenu(g_smConfigInfo, g_eMenu.children);
 }
 
-void LoadConfigs(char[] szPath, StringMap smConfigsByNames, ArrayList aConfigs)
+Action Cmd_Match(int iClient, int iArgs)
 {
-    if (!FileExists(szPath)) {
-        SetFailState("Couldn't load %s", szPath);
-    }
-
-    KeyValues cvConfigs = CreateKeyValues("Configs");
-
-    if (!cvConfigs.ImportFromFile(szPath)) {
-        SetFailState("Failed to parse keyvalues for %s", szPath);
-    }
-
-    if (cvConfigs.GotoFirstSubKey(false))
-    {
-        char szCurrentCategory[64], sKey[MAX_CONFIG_NAME_LENGTH], sValue[MAX_CONFIG_TITLE_LENGTH];
-        Node node;
-
-        do
-        {
-            cvConfigs.GetSectionName(szCurrentCategory, sizeof(szCurrentCategory));
-
-            cvConfigs.Rewind();
-
-            if (!cvConfigs.JumpToKey(szCurrentCategory) || !cvConfigs.GotoFirstSubKey(false)) {
-                continue;
-            }
-
-            strcopy(node.phrases, sizeof(node.phrases), szCurrentCategory);
-            node.children = new ArrayList(ByteCountToCells(MAX_CONFIG_NAME_LENGTH));
-
-            do
-            {
-                cvConfigs.GetSectionName(sKey, sizeof(sKey));
-                cvConfigs.GetString("name", sValue, sizeof(sValue));
-
-                smConfigsByNames.SetString(sKey, sValue);
-                node.children.PushString(sKey);
-            } while (cvConfigs.GotoNextKey(false));
-
-            aConfigs.PushArray(node);
-
-            cvConfigs.GoBack();
-        } while (cvConfigs.GotoNextKey(false));
-    }
-
-    delete cvConfigs;
-}
-
-/**
- * When a player wants to find out whos becoming tank,
- * output to them.
- */
-Action Cmd_Match(int iClient, int args)
-{
-    if (!iClient || IsClientSpectator(iClient)) {
+    if (!iClient) {
         return Plugin_Continue;
     }
 
-    ShowMainMenu(iClient);
+ 
+    switch (iArgs)
+    {
+        case 0: 
+        {
+            g_aActiveNode[iClient] = g_eMenu;
+            ShowMenu(iClient, g_eMenu);
+        }
+
+        case 1:
+        {
+            if (IsClientSpectator(iClient))
+            {
+                CPrintToChat(iClient, "%T%T", "TAG", iClient, "DENY_FOR_SPECTATOR", iClient);
+                return Plugin_Handled;
+            }
+
+            char szArg[MAXLENGTH_CONFIG_ALIAS]; GetCmdArg(1, szArg, sizeof(szArg));
+
+            StringMapSnapshot smConfigInfoSnapshot = g_smConfigInfo.Snapshot();
+
+            ConfigInfo info;
+            char szConfigPath[MAXLENGTH_CONFIG_PATH];
+            bool bFound = false;
+
+            int iSize = smConfigInfoSnapshot.Length;
+            for (int iIndex = 0; iIndex < iSize; iIndex ++)
+            {
+                smConfigInfoSnapshot.GetKey(iIndex, szConfigPath, sizeof szConfigPath);
+
+                g_smConfigInfo.GetArray(szConfigPath, info, sizeof ConfigInfo);
+
+                if (StrEqual(info.alias, szArg, false))
+                {
+                    RunVote(HandlerVoteMatchStart, iClient, szConfigPath);
+                    bFound = true;
+                    break;
+                }
+            }
+
+            delete smConfigInfoSnapshot;
+
+            if (!bFound) {
+                CPrintToChat(iClient, "%T%T", "TAG", iClient, "ALIAS_NOT_FOUND", iClient, szArg);
+            }
+        }
+    }
 
     return Plugin_Handled;
 }
 
-/**
- * When a player wants to find out whos becoming tank,
- * output to them.
- */
-Action Cmd_ResetMatch(int iClient, int args)
+Action Cmd_ResetMatch(int iClient, int iArgs)
 {
-    if (!iClient || IsClientSpectator(iClient)) {
+    if (!iClient) {
         return Plugin_Continue;
     }
 
@@ -149,42 +169,52 @@ Action Cmd_ResetMatch(int iClient, int args)
         return Plugin_Handled;
     }
 
+    if (IsClientSpectator(iClient))
+    {
+        CPrintToChat(iClient, "%T%T", "TAG", iClient, "DENY_FOR_SPECTATOR", iClient);
+        return Plugin_Handled;
+    }
+
     RunVote(HandlerVoteMatchEnd, iClient);
 
     return Plugin_Handled;
 }
 
-
-void ShowMainMenu(int iClient)
+void ShowMenu(int iClient, NodeItem aActiveNode)
 {
-    Menu menu = CreateMenu(HandlerMainMenu, MenuAction_Select|MenuAction_End);
+    Menu menu = CreateMenu(HandlerMenu, MenuAction_Select|MenuAction_End);
 
-    if (ConfigManager_IsConfigLoaded())
-    {
-        char szConfigName[MAX_CONFIG_NAME_LENGTH];
-        ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
+    char szMenuTitle[128];
+    if (!ConfigManager_IsConfigLoaded()) {
+        FormatEx(szMenuTitle, sizeof szMenuTitle, "%T", "MENU_MAIN_TITLE", iClient);
+    } else {
+        char szConfigPath[MAXLENGTH_CONFIG_PATH];
+        ConfigManager_GetConfigPath(szConfigPath, sizeof(szConfigPath));
 
-        char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
-        if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
-            FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
+        ConfigInfo info;
+        if (!g_smConfigInfo.GetArray(szConfigPath, info, sizeof(ConfigInfo))) {
+            FormatEx(szMenuTitle, sizeof szMenuTitle, "%T", "MENU_MAIN_TITLE_WITH_UNKNOWN", iClient);
+        } else {
+           FormatEx(szMenuTitle, sizeof szMenuTitle, "%T", "MENU_MAIN_TITLE_WITH_CONFIG", iClient, info.name);
         }
-
-        menu.SetTitle("%T", "MENU_MAIN_TITLE_EX", iClient, szConfigTitle);
     }
 
-    else {
-        menu.SetTitle("%T", "MENU_MAIN_TITLE", iClient);
-    }
+    menu.SetTitle(szMenuTitle);
 
-    Node node;
     char szIdx[4];
-    for (int iIdx = 0; iIdx < g_aConfigs.Length; iIdx ++)
+    NodeItem node;
+    ConfigInfo info;
+    for (int iIdx = 0; iIdx < aActiveNode.children.Length; iIdx ++)
     {
-        g_aConfigs.GetArray(iIdx, node);
+        aActiveNode.children.GetArray(iIdx, node);
 
         IntToString(iIdx, szIdx, sizeof(szIdx));
 
-        menu.AddItem(szIdx, node.phrases);
+        if (g_smConfigInfo.GetArray(node.value, info, sizeof(info))) {
+            menu.AddItem(szIdx, info.name);
+        } else {
+            menu.AddItem(szIdx, node.value);
+        }
     }
 
     menu.Display(iClient, -1);
@@ -193,9 +223,9 @@ void ShowMainMenu(int iClient)
 /**
  *
  */
-int HandlerMainMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
+int HandlerMenu(Menu menu, MenuAction action, int iClient, int iItem)
 {
-    switch(hAction)
+    switch (action)
     {
         case MenuAction_End: delete menu;
 
@@ -204,62 +234,86 @@ int HandlerMainMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
             char szIdx[8];
             menu.GetItem(iItem, szIdx, sizeof(szIdx));
 
-            ShowCategoryMenu(iClient, StringToInt(szIdx));
+            int iIdx = StringToInt(szIdx);
+
+            NodeItem node;
+            g_aActiveNode[iClient].children.GetArray(iIdx, node);
+
+            if (node.children.Length) {
+                g_aActiveNode[iClient] = node;
+                ShowMenu(iClient, node);
+            } else {
+                ShowConfigMenu(iClient, node.value);
+            }
+
         }
     }
 
     return 0;
 }
 
-void ShowCategoryMenu(int iClient, int iCategoryIdx)
+void ShowConfigMenu(int iClient, char[] szConfigPath)
 {
-    Menu menu = CreateMenu(HandlerCategoryMenu, MenuAction_Select|MenuAction_End);
+    Menu menu = CreateMenu(HandlerConfigMenu, MenuAction_Select|MenuAction_End|MenuAction_Cancel);
 
-    char szConfigName[MAX_CONFIG_NAME_LENGTH];
-    char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
+    ConfigInfo info;
+    g_smConfigInfo.GetArray(szConfigPath, info, sizeof(info));
 
-    Node node;
-    g_aConfigs.GetArray(iCategoryIdx, node);
+    menu.SetTitle("%T", "MENU_INFO_TITLE", iClient, info.name, info.alias, info.version, info.author);
 
-    if (ConfigManager_IsConfigLoaded())
-    {
-        ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
+    char szBuffer[64];
 
-        if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
-            FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
-        }
+    FormatEx(szBuffer, sizeof(szBuffer), "%T", "RUN_VOTE", iClient);
+    menu.AddItem(szConfigPath, szBuffer);
 
-        menu.SetTitle("%T", "MENU_CATEGORY_TITLE_EX", iClient, szConfigTitle);
-    }
-
-    else {
-        menu.SetTitle("%T", "MENU_CATEGORY_TITLE", iClient);
-    }
-
-    for (int iIdx = 0; iIdx < node.children.Length; iIdx ++)
-    {
-        node.children.GetString(iIdx, szConfigName, sizeof(szConfigName));
-
-        g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle));
-
-        menu.AddItem(szConfigName, szConfigTitle);
-    }
+    FormatEx(szBuffer, sizeof(szBuffer), "%T", "PRINT_DESCRIPTION", iClient);
+    menu.AddItem(szConfigPath, szBuffer, info.description != null && info.description.Length > 0 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
     menu.Display(iClient, -1);
 }
 
-public int HandlerCategoryMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
+public int HandlerConfigMenu(Menu menu, MenuAction action, int iClient, int iItem)
 {
-    switch(hAction)
+    switch (action)
     {
         case MenuAction_End: delete menu;
 
+        case MenuAction_Cancel: {
+            if (iItem == MenuEnd_Cancelled) {
+                ShowMenu(iClient, g_aActiveNode[iClient]);
+            }
+        }
+
         case MenuAction_Select:
         {
-            char szTargetConfig[MAX_CONFIG_NAME_LENGTH];
+            char szTargetConfig[MAXLENGTH_CONFIG_PATH];
             menu.GetItem(iItem, szTargetConfig, sizeof(szTargetConfig));
 
-            RunVote(HandlerVoteMatchStart, iClient, szTargetConfig);
+            switch (iItem)
+            {
+                case 0: {
+                    if (!IsClientSpectator(iClient)) {
+                        RunVote(HandlerVoteMatchStart, iClient, szTargetConfig);
+                    } else {
+                        CPrintToChat(iClient, "%T%T", "TAG", iClient, "DENY_FOR_SPECTATOR", iClient);
+                        ShowConfigMenu(iClient, szTargetConfig);
+                    }
+                }
+
+                case 1: {
+                    ConfigInfo info;
+                    g_smConfigInfo.GetArray(szTargetConfig, info, sizeof(info));
+
+                    char szChatMessage[MAXLENGTH_CHAT_MESSAGE];
+                    for (int iIdx = 0; iIdx < info.description.Length; iIdx++)
+                    {
+                        info.description.GetString(iIdx, szChatMessage, sizeof(szChatMessage));
+                        CPrintToChat(iClient, "%s", szChatMessage);
+                    }
+
+                    ShowConfigMenu(iClient, szTargetConfig);
+                }
+            }
         }
     }
 
@@ -310,35 +364,35 @@ Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, 
     {
         case VoteAction_Display:
         {
-            char szConfigTitle[MAX_CONFIG_TITLE_LENGTH], sVoteDisplayMessage[128];
+            char szVoteDetails[128];
+            ConfigInfo info;
+            if (!g_smConfigInfo.GetArray(g_szTargetConfig, info, sizeof(ConfigInfo))) {
+                FormatEx(szVoteDetails, sizeof(szVoteDetails), "%T", "VOTE_MATCH_START", iParam1, g_szTargetConfig);
+            } else {
+                FormatEx(szVoteDetails, sizeof(szVoteDetails), "%T", "VOTE_MATCH_START", iParam1, info.name);
+            }
 
-            g_smConfigsByNames.GetString(g_szTargetConfig, szConfigTitle, sizeof(szConfigTitle));
-
-            FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_START", iParam1, szConfigTitle);
-
-            hVote.SetDetails(sVoteDisplayMessage);
+            hVote.SetDetails(szVoteDetails);
 
             return Plugin_Changed;
         }
 
-        case VoteAction_Cancel: {
-            hVote.DisplayFail();
-        }
+        case VoteAction_Cancel: hVote.DisplayFail();
 
         case VoteAction_Finish:
         {
             if (iParam1 == NATIVEVOTES_VOTE_NO)
             {
-                g_szTargetConfig[0] = '\0';
                 hVote.DisplayFail();
+                g_szTargetConfig[0] = '\0';
 
                 return Plugin_Continue;
             }
 
+            hVote.DisplayPass();
+
             ConfigManager_LoadConfig(g_szTargetConfig);
             g_szTargetConfig[0] = '\0';
-
-            hVote.DisplayPass();
         }
 
         case VoteAction_End: hVote.Close();
@@ -361,25 +415,24 @@ Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, in
     {
         case VoteAction_Display:
         {
-            char sVoteDisplayMessage[128];
+            char szConfigPath[MAXLENGTH_CONFIG_PATH];
+            ConfigManager_GetConfigPath(szConfigPath, sizeof(szConfigPath));
 
-            char szConfigName[MAX_CONFIG_NAME_LENGTH], szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
-            ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
+            char szVoteDetails[128];
+            ConfigInfo info;
 
-            if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
-                FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iParam1);
+            if (!g_smConfigInfo.GetArray(szConfigPath, info, sizeof(ConfigInfo))) {
+                FormatEx(szVoteDetails, sizeof(szVoteDetails), "%T", "VOTE_MATCH_END", iParam1, szConfigPath);
+            } else {
+                FormatEx(szVoteDetails, sizeof(szVoteDetails), "%T", "VOTE_MATCH_END", iParam1, info.name);
             }
 
-            FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_END", iParam1, szConfigTitle);
-
-            hVote.SetDetails(sVoteDisplayMessage);
+            hVote.SetDetails(szVoteDetails);
 
             return Plugin_Changed;
         }
 
-        case VoteAction_Cancel: {
-            hVote.DisplayFail();
-        }
+        case VoteAction_Cancel: hVote.DisplayFail();
 
         case VoteAction_Finish:
         {
@@ -399,6 +452,272 @@ Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, in
     }
 
     return Plugin_Continue;
+}
+
+void BuildMenu(char[] szPath, NodeItem menu)
+{
+    if (!FileExists(szPath)) {
+        SetFailState("Couldn't load %s", szPath);
+    }
+
+    KeyValues kv = CreateKeyValues("Configs");
+
+    if (!kv.ImportFromFile(szPath)) {
+        SetFailState("Failed to parse keyvalues for %s", szPath);
+    }
+
+    ArrayList hierarchy = BuildHierarchy(kv);
+
+    strcopy(menu.key, sizeof menu.key, "\0");
+    strcopy(menu.value, sizeof menu.value, "MENU_MAIN_TITLE");
+    menu.children = SimplifyHierarchy(hierarchy);
+
+    delete kv;
+    delete hierarchy;
+}
+
+/**
+ * High-level transformation of a raw NodeItem hierarchy into a simplified category-item tree.
+ *
+ * This function iterates over all top-level nodes in the raw hierarchy (typically produced by BuildHierarchy),
+ * and applies SimplifyNodeTo to each one. The result is a flattened structure where each node contains:
+ * - a resolved name (from child "name" node),
+ * - a value (used as identifier),
+ * - and a list of children representing items or subcategories.
+ *
+ * @param rawHierarchy   An ArrayList of NodeItem structs from BuildHierarchy.
+ * @return               A new ArrayList of simplified NodeItem structs with normalized structure.
+ */
+ArrayList SimplifyHierarchy(ArrayList rawHierarchy)
+{
+    ArrayList result = new ArrayList(sizeof(NodeItem));
+
+    for (int iIdx = 0; iIdx < rawHierarchy.Length; iIdx++)
+    {
+        NodeItem src;
+        rawHierarchy.GetArray(iIdx, src);
+        SimplifyNodeTo(result, src);
+    }
+
+    return result;
+}
+
+/**
+ * Recursively simplifies a hierarchical NodeItem structure into a flat category-item tree.
+ *
+ * This function transforms a complex node (with nested categories and items)
+ * into a simplified representation where each node has:
+ * - a `key` (original category key),
+ * - a `value` (resolved name from child "name" node),
+ * - and a list of children representing either items or subcategories.
+ *
+ * Items are extracted from "items" blocks, and subcategories are recursively simplified.
+ *
+ * @param result   The ArrayList to which the simplified NodeItem will be appended.
+ * @param src      The source NodeItem to simplify.
+ */
+void SimplifyNodeTo(ArrayList result, const NodeItem src)
+{
+    // 1) Initialize the destination node with key and empty value
+    NodeItem dst;
+    strcopy(dst.key,   sizeof(dst.key),   src.key);
+    dst.value[0] = '\0';
+    dst.children = new ArrayList(sizeof(NodeItem));
+
+    // 2) Try to extract the category name from a child node with key "name"
+    for (int i = 0; i < src.children.Length; i++)
+    {
+        NodeItem child;
+        src.children.GetArray(i, child);
+        if (StrEqual(child.key, "name", false))
+        {
+            strcopy(dst.value, sizeof(dst.value), child.value);
+            break;
+        }
+    }
+
+    // Fallback: use src.key if no "name" child was found
+    if (dst.value[0] == '\0')
+    {
+        strcopy(dst.value, sizeof(dst.value), src.key);
+    }
+
+    // 3) Process the "items" block, if present
+    for (int i = 0; i < src.children.Length; i++)
+    {
+        NodeItem block;
+        src.children.GetArray(i, block);
+        if (!StrEqual(block.key, "items", false))
+            continue;
+
+        // Inside "items" we may find "item" or nested "category"
+        for (int j = 0; j < block.children.Length; j++)
+        {
+            NodeItem sub;
+            block.children.GetArray(j, sub);
+
+            // 3.1) Handle individual item
+            if (StrEqual(sub.key, "item", false))
+            {
+                // Ищем в sub его child.key == "name"
+                NodeItem leafNode;
+                strcopy(leafNode.key,   sizeof(leafNode.key),   sub.key);
+                leafNode.children = new ArrayList(sizeof(NodeItem));
+
+                for (int k = 0; k < sub.children.Length; k++)
+                {
+                    NodeItem child;
+                    sub.children.GetArray(k, child);
+
+                    if (StrEqual(child.key, "name", false))
+                    {
+                        strcopy(leafNode.value, sizeof(leafNode.value), child.value);
+                        break;
+                    }
+                }
+
+                dst.children.PushArray(leafNode);
+            }
+            // 3.2) Handle nested category inside "items"
+            else if (StrEqual(sub.key, "category", false))
+            {
+                SimplifyNodeTo(dst.children, sub);
+            }
+        }
+    }
+
+    // 4) Process additional categories at the same level as src
+    for (int i = 0; i < src.children.Length; i++)
+    {
+        NodeItem child;
+        src.children.GetArray(i, child);
+
+        // Skip already processed keys
+        if (StrEqual(child.key, "name", false) || StrEqual(child.key, "items", false)) {
+            continue;
+        }
+
+        // Treat any other "category" as a subcategory
+        if (StrEqual(child.key, "category", false)) {
+            SimplifyNodeTo(dst.children, child);
+        }
+    }
+
+    // 5) Кладём готовый узел в результат
+    result.PushArray(dst);
+}
+
+/**
+ * Recursively constructs a tree of NodeItem structs from a KeyValues object.
+ *
+ * This function traverses all immediate subkeys of the current KeyValues position,
+ * creating a NodeItem for each key. Each node stores its name, value, and a list
+ * of child nodes built recursively from its own subkeys.
+ *
+ * @param kv         The KeyValues object to read from. Assumes current position is valid.
+ * @return           An ArrayList containing NodeItem structs representing the hierarchy.
+ *                   Each NodeItem owns its own children list.
+ */
+ArrayList BuildHierarchy(KeyValues kv)
+{
+    // Create a new list to hold nodes at the current level
+    ArrayList nodes = new ArrayList(sizeof(NodeItem));
+
+    // Attempt to enter the first child key (includes both sections and leaf nodes)
+    if (!KvGotoFirstSubKey(kv, false)) {
+        return nodes; // No children — return empty list
+    }
+
+    char keyName[MAXLENGTH_NODE_KEY];
+    char keyValue[MAXLENGTH_NODE_VALUE];
+
+    do
+    {
+        // Read the current key's name and value
+        KvGetSectionName(kv, keyName, sizeof(keyName));
+        KvGetString(kv, NULL_STRING, keyValue, sizeof(keyValue));
+
+        // Create a new node and assign key/value
+        NodeItem node;
+        strcopy(node.key, sizeof(node.key), keyName);
+        strcopy(node.value, sizeof(node.value), keyValue);
+
+        // Recursively build children for this node
+        node.children = BuildHierarchy(kv);
+
+        // Add the completed node to the result list
+        nodes.PushArray(node);
+    }
+    while (KvGotoNextKey(kv));
+
+    // Return to parent level after traversal
+    KvGoBack(kv);
+    return nodes;
+}
+
+/**
+ * Recursively traverses a hierarchy of NodeItem entries and loads ConfigInfo data from disk.
+ *
+ * For each leaf node (i.e., node without children), this function attempts to locate and parse
+ * an `info.txt` file located at the path derived from the node's value. If successful, it extracts
+ * metadata fields and description lines into a ConfigInfo struct, which is stored in the provided StringMap.
+ *
+ * @param smConfigInfo   A StringMap where parsed ConfigInfo structs will be stored.
+ *                       The key is the node's value (used as config identifier).
+ * @param nodes          An ArrayList of NodeItem structs representing the current level of hierarchy.
+ */
+void PushConfigInfoFromMenu(StringMap smConfigInfo, ArrayList nodes)
+{
+    KeyValues kv = new KeyValues("ConfigInfo");
+
+    NodeItem node;
+    ConfigInfo ci;
+    char szConfigPath[PLATFORM_MAX_PATH], szMessage[MAXLENGTH_CHAT_MESSAGE];
+
+    for (int iIdx = 0; iIdx < nodes.Length; iIdx++)
+    {
+        nodes.GetArray(iIdx, node);
+
+        // If the node has children, recurse into them
+        if (node.children.Length > 0)
+        {
+            PushConfigInfoFromMenu(smConfigInfo, node.children);
+        }
+        else
+        {
+            // Build path to info.txt and attempt to import
+            ConfigManager_BuildConfigPath(szConfigPath, node.value);
+            StrCat(szConfigPath, sizeof(szConfigPath), "/info.txt");
+
+            // File not found or failed to parse — skip
+            if (!kv.ImportFromFile(szConfigPath)) {
+                continue;
+            }
+
+            // Extract fields into ConfigInfo struct
+            kv.GetString("name",    ci.name,    sizeof(ci.name));
+            kv.GetString("alias",   ci.alias,   sizeof(ci.alias));
+            kv.GetString("version", ci.version, sizeof(ci.version));
+            kv.GetString("author", ci.author, sizeof(ci.author));
+
+            if (kv.JumpToKey("description") && KvGotoFirstSubKey(kv, false))
+            {
+                ci.description = new ArrayList(ByteCountToCells(sizeof(szMessage)));
+
+                do
+                {
+                    kv.GetString(NULL_STRING, szMessage, sizeof(szMessage));
+                    ci.description.PushString(szMessage);
+                }
+                while (KvGotoNextKey(kv, false));
+            }
+
+            // Store result in the map
+            smConfigInfo.SetArray(node.value, ci, sizeof(ConfigInfo));
+        }
+    }
+
+    delete kv;
 }
 
 /**
