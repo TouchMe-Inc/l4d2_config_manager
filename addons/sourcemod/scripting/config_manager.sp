@@ -99,6 +99,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     g_hFwdOnLoadConfig   = CreateGlobalForward("ConfigManager_OnLoadConfig", ET_Ignore);
     g_hFwdOnUnloadConfig = CreateGlobalForward("ConfigManager_OnUnloadConfig", ET_Ignore);
 
+    CreateNative("ConfigManager_BuildConfigPath", Native_BuildConfigPath);
     CreateNative("ConfigManager_IsConfigLoaded", Native_IsConfigLoaded);
     CreateNative("ConfigManager_GetConfigName", Native_GetConfigName);
     CreateNative("ConfigManager_LoadConfig", Native_LoadConfig);
@@ -107,6 +108,19 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     RegPluginLibrary("config_manager");
 
     return APLRes_Success;
+}
+
+int Native_BuildConfigPath(Handle plugin, int numParams)
+{
+    char szConfigName[CONFIG_NAME_MAX];
+    GetNativeString(2, szConfigName, sizeof(szConfigName));
+
+    char szConfigPath[PLATFORM_MAX_PATH];
+    BuildConfigPath(szConfigPath, szConfigName);
+
+    SetNativeString(1, szConfigPath, sizeof(szConfigPath));
+
+    return 1;
 }
 
 int Native_IsConfigLoaded(Handle plugin, int numParams) {
@@ -273,6 +287,10 @@ public void OnConVarChanged(ConVar convar, const char[] sOldValue, const char[] 
     g_bConVarHookIgnore = false;
 }
 
+void BuildConfigPath(char szConfigPath[PLATFORM_MAX_PATH], const char[] szConfigName) {
+    BuildPath(Path_SM, szConfigPath, sizeof(szConfigPath), "%s%s/%s", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, szConfigName);
+}
+
 bool IsConfigLoaded() {
     return (g_szConfigName[0] != '\0');
 }
@@ -280,7 +298,8 @@ bool IsConfigLoaded() {
 bool LoadConfig(const char[] szConfigName)
 {
     char szPathToConfigLoadFile[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPathToConfigLoadFile, sizeof(szPathToConfigLoadFile), "%s/%s/%s/config_load.cfg", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, szConfigName);
+    BuildConfigPath(szPathToConfigLoadFile, szConfigName);
+    Format(szPathToConfigLoadFile, sizeof(szPathToConfigLoadFile), "%s/config_load.cfg", szPathToConfigLoadFile);
 
     if (!FileExists(szPathToConfigLoadFile))
     {
@@ -300,7 +319,8 @@ bool LoadConfig(const char[] szConfigName)
 bool UnloadConfig()
 {
     char szPathToConfigUnloadFile[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPathToConfigUnloadFile, sizeof(szPathToConfigUnloadFile), "%s/%s/%s/config_unload.cfg", PATH_TO_CFG_RELATIVE, CONFIG_MANAGER_DIR, g_szConfigName);
+    BuildConfigPath(szPathToConfigUnloadFile, g_szConfigName);
+    Format(szPathToConfigUnloadFile, sizeof(szPathToConfigUnloadFile), "%s/config_unload.cfg", szPathToConfigUnloadFile);
 
     if (!FileExists(szPathToConfigUnloadFile))
     {

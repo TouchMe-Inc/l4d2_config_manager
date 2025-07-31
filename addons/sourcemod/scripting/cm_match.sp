@@ -17,10 +17,10 @@ public Plugin myinfo =
 }
 
 
-#define MAX_CONFIG_NAME_LENGTH         64
-#define MAX_CONFIG_TITLE_LENGTH         64
+#define MAX_CONFIG_NAME_LENGTH  64
+#define MAX_CONFIG_TITLE_LENGTH 64
 
-#define PATH_CONFIG_MATCH        "configs/cm_match.txt"
+#define PATH_TO_CONFIG          "configs/cm_match.txt"
 
 #define TRANSLATIONS            "cm_match.phrases"
 
@@ -28,17 +28,27 @@ public Plugin myinfo =
 
 #define VOTE_TIME               15
 
-enum struct Node
+
+enum struct ConfigInfo
 {
-    char phrases[32];
+    char name[32];
+    char alias[32];
+    char version[16];
+    char author[32];
+    ArrayList description;
+}
+
+enum struct NodeItem
+{
+    char key[32];
+    char value[128];
     ArrayList children;
 }
 
-char g_szTargetConfig[MAX_CONFIG_NAME_LENGTH];
+ArrayList g_hActiveMenu[MAXPLAYERS + 1];
 
-
-ArrayList g_aConfigs = null;
-StringMap g_smConfigsByNames = null;
+ArrayList g_hMenu = null;
+StringMap g_smConfigInfo = null;
 
 /**
  * Called before OnPluginStart.
@@ -56,90 +66,291 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
-    g_aConfigs = new ArrayList(sizeof(Node));
-    g_smConfigsByNames = new StringMap();
-
-    char szPath[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_CONFIG_MATCH);
-    LoadConfigs(szPath, g_smConfigsByNames, g_aConfigs);
-
     // Load translations.
     LoadTranslations(TRANSLATIONS);
 
     RegConsoleCmd("sm_match", Cmd_Match);
     RegConsoleCmd("sm_rmatch", Cmd_ResetMatch);
+
+    char szPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPath, sizeof(szPath), PATH_TO_CONFIG);
+    g_hMenu = BuildMenu(szPath);
+
+    g_smConfigInfo = new StringMap();
+    PushConfigInfoFromMenu(g_smConfigInfo, g_hMenu);
 }
 
-void LoadConfigs(char[] szPath, StringMap smConfigsByNames, ArrayList aConfigs)
+ArrayList BuildMenu(char[] szPath)
 {
     if (!FileExists(szPath)) {
         SetFailState("Couldn't load %s", szPath);
     }
 
-    KeyValues cvConfigs = CreateKeyValues("Configs");
+    KeyValues kv = CreateKeyValues("Configs");
 
-    if (!cvConfigs.ImportFromFile(szPath)) {
+    if (!kv.ImportFromFile(szPath)) {
         SetFailState("Failed to parse keyvalues for %s", szPath);
     }
 
-    if (cvConfigs.GotoFirstSubKey(false))
-    {
-        char szCurrentCategory[64], sKey[MAX_CONFIG_NAME_LENGTH], sValue[MAX_CONFIG_TITLE_LENGTH];
-        Node node;
+    ArrayList hierarchy = BuildHierarchy(kv);
 
-        do
-        {
-            cvConfigs.GetSectionName(szCurrentCategory, sizeof(szCurrentCategory));
+    delete kv;
 
-            cvConfigs.Rewind();
+    ArrayList menu = SimplifyHierarchy(hierarchy);
 
-            if (!cvConfigs.JumpToKey(szCurrentCategory) || !cvConfigs.GotoFirstSubKey(false)) {
-                continue;
-            }
+    delete hierarchy;
 
-            strcopy(node.phrases, sizeof(node.phrases), szCurrentCategory);
-            node.children = new ArrayList(ByteCountToCells(MAX_CONFIG_NAME_LENGTH));
-
-            do
-            {
-                cvConfigs.GetSectionName(sKey, sizeof(sKey));
-                cvConfigs.GetString("name", sValue, sizeof(sValue));
-
-                smConfigsByNames.SetString(sKey, sValue);
-                node.children.PushString(sKey);
-            } while (cvConfigs.GotoNextKey(false));
-
-            aConfigs.PushArray(node);
-
-            cvConfigs.GoBack();
-        } while (cvConfigs.GotoNextKey(false));
-    }
-
-    delete cvConfigs;
+    return menu;
 }
 
 /**
- * When a player wants to find out whos becoming tank,
- * output to them.
+ * Высокоуровневая функция: обходит весь rawHierarchy и
+ * на каждый корневой узел вызывает SimplifyNodeTo.
+ *
+ * @param rawHierarchy  ArrayList sizeof(NodeItem) — от BuildHierarchy
+ * @return              Новая иерархия с name→value и items→children
  */
+ArrayList SimplifyHierarchy(ArrayList rawHierarchy)
+{
+    ArrayList result = new ArrayList(sizeof(NodeItem));
+
+    for (int i = 0; i < rawHierarchy.Length; i++)
+    {
+        NodeItem src;
+        rawHierarchy.GetArray(i, src);
+        SimplifyNodeTo(result, src);
+    }
+
+    return result;
+}
+
+/**
+ * Кладёт в result новый узел dst:
+ *   dst.key     = src.key
+ *   dst.value   = текст из под-узла "name" или, если нет, src.key
+ *   dst.children = список:
+ *     – всех созданных из "item" листов
+ *     – рекурсивно упрощённых вложенных "category"
+ *
+ * @param result  ArrayList sizeof(NodeItem) — куда пушим dst
+ * @param src     NodeItem из BuildHierarchy()
+ */
+void SimplifyNodeTo(ArrayList result, const NodeItem src)
+{
+    // 1) Собираем базовый dst
+    NodeItem dst;
+    strcopy(dst.key,   sizeof(dst.key),   src.key);
+    dst.value[0] = '\0';
+    dst.children = new ArrayList(sizeof(NodeItem));
+
+    // 2) Находим имя категории (под-узел "name")
+    for (int i = 0; i < src.children.Length; i++)
+    {
+        NodeItem child;
+        src.children.GetArray(i, child);
+        if (StrEqual(child.key, "name", false))
+        {
+            strcopy(dst.value, sizeof(dst.value), child.value);
+            break;
+        }
+    }
+
+    // fallback на src.key, если name не найден
+    if (dst.value[0] == '\0')
+    {
+        strcopy(dst.value, sizeof(dst.value), src.key);
+    }
+
+    // 3) Обрабатываем блок "items"
+    for (int i = 0; i < src.children.Length; i++)
+    {
+        NodeItem block;
+        src.children.GetArray(i, block);
+        if (!StrEqual(block.key, "items", false))
+            continue;
+
+        // Внутри "items" может быть и "item", и вложенная "category"
+        for (int j = 0; j < block.children.Length; j++)
+        {
+            NodeItem sub;
+            block.children.GetArray(j, sub);
+
+            // 3.1) Чистый элемент
+            if (StrEqual(sub.key, "item", false))
+            {
+                // Ищем в sub его child.key == "name"
+                NodeItem leafNode;
+                strcopy(leafNode.key,   sizeof(leafNode.key),   sub.key);
+                leafNode.children = new ArrayList(sizeof(NodeItem));
+
+                for (int k = 0; k < sub.children.Length; k++)
+                {
+                    NodeItem child;
+                    sub.children.GetArray(k, child);
+
+                    if (StrEqual(child.key, "name", false))
+                    {
+                        strcopy(leafNode.value, sizeof(leafNode.value), child.value);
+                        break;
+                    }
+                }
+
+                dst.children.PushArray(leafNode);
+            }
+            // 3.2) Вложенная категория внутри items
+            else if (StrEqual(sub.key, "category", false))
+            {
+                SimplifyNodeTo(dst.children, sub);
+            }
+        }
+    }
+
+    // 4) Обрабатываем вложенные категории на том же уровне, что и src
+    for (int i = 0; i < src.children.Length; i++)
+    {
+        NodeItem child;
+        src.children.GetArray(i, child);
+
+        // уже сделали name и items
+        if (StrEqual(child.key, "name", false) || StrEqual(child.key, "items", false))
+            continue;
+
+        // любые другие под-узлы считаем дополнительными категориями
+        if (StrEqual(child.key, "category", false)) {
+            SimplifyNodeTo(dst.children, child);
+        }
+    }
+
+    // 5) Кладём готовый узел в результат
+    result.PushArray(dst);
+}
+
+/**
+ * PushConfigInfoFromMenu
+ *
+ * Recursively traverses a menu node tree and loads configuration metadata for each leaf node
+ * (i.e., nodes without children). For every such node:
+ *   1) A configuration path is built using ConfigManager_BuildConfigPath().
+ *   2) "/info.txt" is appended to the path.
+ *   3) KeyValues are imported from the file.
+ *   4) Fields "name", "alias", and "version" are extracted into a ConfigInfo struct.
+ *   5) The struct is stored in the provided StringMap using node.value as the key.
+ *
+ * @param StringMap smConfigInfo
+ *   A map that stores ConfigInfo structs indexed by node.value.
+ *
+ * @param ArrayList nodes
+ *   A list of NodeItem objects representing menu nodes. Each node contains:
+ *     - node.children: an ArrayList of child nodes;
+ *     - node.value: a unique identifier for the configuration.
+ */
+void PushConfigInfoFromMenu(StringMap smConfigInfo, ArrayList nodes)
+{
+    KeyValues kv = new KeyValues("ConfigInfo");
+
+    NodeItem node;
+    ConfigInfo ci;
+    char szConfigPath[PLATFORM_MAX_PATH];
+    char szMessage[256];
+
+    for (int iIdx = 0; iIdx < nodes.Length; iIdx++)
+    {
+        nodes.GetArray(iIdx, node);
+
+         // If the node has children, recurse into them
+        if (node.children.Length > 0)
+        {
+            PushConfigInfoFromMenu(smConfigInfo, node.children);
+        }
+        else
+        {
+            // Build path to info.txt and attempt to import
+            ConfigManager_BuildConfigPath(szConfigPath, node.value);
+            StrCat(szConfigPath, sizeof(szConfigPath), "/info.txt");
+
+            // File not found or failed to parse — skip
+            if (!kv.ImportFromFile(szConfigPath)) {
+                continue;
+            }
+
+            // Extract fields into ConfigInfo struct
+            kv.GetString("name",    ci.name,    sizeof(ci.name));
+            kv.GetString("alias",   ci.alias,   sizeof(ci.alias));
+            kv.GetString("version", ci.version, sizeof(ci.version));
+            kv.GetString("author", ci.author, sizeof(ci.author));
+
+            if (kv.JumpToKey("description") && KvGotoFirstSubKey(kv, false))
+            {
+                ci.description = new ArrayList(ByteCountToCells(sizeof(szMessage)));
+
+                do
+                {
+                    kv.GetString("text", szMessage, sizeof(szMessage));
+                    ci.description.PushString(szMessage);
+                }
+                while (KvGotoNextKey(kv, false));
+            }
+
+            // Store result in the map
+            smConfigInfo.SetArray(node.value, ci, sizeof(ConfigInfo));
+        }
+    }
+
+    delete kv;
+}
+
+/**
+ * Рекурсивно собирает дерево из hKv в ArrayList.
+ * @return Новый ArrayList (список узлов), владеющий своими children.
+ */
+ArrayList BuildHierarchy(Handle hKv)
+{
+    ArrayList nodes = new ArrayList(sizeof(NodeItem));
+
+    // Заходим в первый дочерний узел (и секции, и leaf-элементы)
+    if (!KvGotoFirstSubKey(hKv, false)) {
+        return nodes; // пустой список, если нет потомков
+    }
+
+    do
+    {
+        // 1) Считываем имя и значение
+        char keyName[32];
+        KvGetSectionName(hKv, keyName, sizeof(keyName));
+
+        char keyValue[128];
+        KvGetString(hKv, NULL_STRING, keyValue, sizeof(keyValue));
+
+        // 2) Создаём «узел» и кладём name/value
+        NodeItem node;
+        strcopy(node.key, sizeof(node.key), keyName);
+        strcopy(node.value, sizeof(node.value), keyValue);
+
+        // 3) Рекурсивно строим список детей
+        node.children = BuildHierarchy(hKv);
+
+        // 4) Кладём готовый узел в результирующий список
+        nodes.PushArray(node);
+    } while (KvGotoNextKey(hKv));
+
+    KvGoBack(hKv);
+    return nodes;
+}
+
 Action Cmd_Match(int iClient, int args)
 {
-    if (!iClient || IsClientSpectator(iClient)) {
+    if (!iClient) {
         return Plugin_Continue;
     }
 
-    ShowMainMenu(iClient);
+    ShowMenu(iClient, g_hActiveMenu[iClient] = g_hMenu);
 
     return Plugin_Handled;
 }
 
-/**
- * When a player wants to find out whos becoming tank,
- * output to them.
- */
 Action Cmd_ResetMatch(int iClient, int args)
 {
-    if (!iClient || IsClientSpectator(iClient)) {
+    if (!iClient) {
         return Plugin_Continue;
     }
 
@@ -149,42 +360,43 @@ Action Cmd_ResetMatch(int iClient, int args)
         return Plugin_Handled;
     }
 
-    RunVote(HandlerVoteMatchEnd, iClient);
+    // RunVote(HandlerVoteMatchEnd, iClient);
 
     return Plugin_Handled;
 }
 
-
-void ShowMainMenu(int iClient)
+void ShowMenu(int iClient, ArrayList hActiveMenu)
 {
-    Menu menu = CreateMenu(HandlerMainMenu, MenuAction_Select|MenuAction_End);
+    Menu menu = CreateMenu(HandlerMenu, MenuAction_Select|MenuAction_End);
 
-    if (ConfigManager_IsConfigLoaded())
-    {
+    if (!ConfigManager_IsConfigLoaded()) {
+        menu.SetTitle("%T", "MENU_MAIN_TITLE", iClient);
+    } else {
         char szConfigName[MAX_CONFIG_NAME_LENGTH];
         ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
 
         char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
-        if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
+        if (!g_smConfigInfo.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
             FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
         }
 
         menu.SetTitle("%T", "MENU_MAIN_TITLE_EX", iClient, szConfigTitle);
     }
 
-    else {
-        menu.SetTitle("%T", "MENU_MAIN_TITLE", iClient);
-    }
-
-    Node node;
     char szIdx[4];
-    for (int iIdx = 0; iIdx < g_aConfigs.Length; iIdx ++)
+    NodeItem node;
+    ConfigInfo info;
+    for (int iIdx = 0; iIdx < hActiveMenu.Length; iIdx ++)
     {
-        g_aConfigs.GetArray(iIdx, node);
+        hActiveMenu.GetArray(iIdx, node);
 
         IntToString(iIdx, szIdx, sizeof(szIdx));
 
-        menu.AddItem(szIdx, node.phrases);
+        if (g_smConfigInfo.GetArray(node.value, info, sizeof(info))) {
+            menu.AddItem(szIdx, info.name);
+        } else {
+            menu.AddItem(szIdx, node.value);
+        }
     }
 
     menu.Display(iClient, -1);
@@ -193,9 +405,9 @@ void ShowMainMenu(int iClient)
 /**
  *
  */
-int HandlerMainMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
+int HandlerMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
 {
-    switch(hAction)
+    switch (hAction)
     {
         case MenuAction_End: delete menu;
 
@@ -204,97 +416,104 @@ int HandlerMainMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
             char szIdx[8];
             menu.GetItem(iItem, szIdx, sizeof(szIdx));
 
-            ShowCategoryMenu(iClient, StringToInt(szIdx));
+            int iIdx = StringToInt(szIdx);
+
+            NodeItem node;
+            g_hActiveMenu[iClient].GetArray(iIdx, node);
+
+            PrintToChatAll("%s %s : %d", node.key, node.value, node.children.Length);
+
+            ShowMenu(iClient, g_hActiveMenu[iClient] = node.children);
         }
     }
 
     return 0;
 }
 
-void ShowCategoryMenu(int iClient, int iCategoryIdx)
-{
-    Menu menu = CreateMenu(HandlerCategoryMenu, MenuAction_Select|MenuAction_End);
+// void ShowCategoryMenu(int iClient, int iCategoryIdx)
+// {
+//     Menu menu = CreateMenu(HandlerCategoryMenu, MenuAction_Select|MenuAction_End);
 
-    char szConfigName[MAX_CONFIG_NAME_LENGTH];
-    char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
+//     char szConfigName[MAX_CONFIG_NAME_LENGTH];
+//     char szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
 
-    Node node;
-    g_aConfigs.GetArray(iCategoryIdx, node);
+//     Node node;
+//     g_hMenu.GetArray(iCategoryIdx, node);
 
-    if (ConfigManager_IsConfigLoaded())
-    {
-        ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
+//     if (ConfigManager_IsConfigLoaded())
+//     {
+//         ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
 
-        if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
-            FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
-        }
+//         if (!g_smConfigInfo.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
+//             FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iClient);
+//         }
 
-        menu.SetTitle("%T", "MENU_CATEGORY_TITLE_EX", iClient, szConfigTitle);
-    }
+//         menu.SetTitle("%T", "MENU_CATEGORY_TITLE_EX", iClient, szConfigTitle);
+//     }
 
-    else {
-        menu.SetTitle("%T", "MENU_CATEGORY_TITLE", iClient);
-    }
+//     else {
+//         menu.SetTitle("%T", "MENU_CATEGORY_TITLE", iClient);
+//     }
 
-    for (int iIdx = 0; iIdx < node.children.Length; iIdx ++)
-    {
-        node.children.GetString(iIdx, szConfigName, sizeof(szConfigName));
+//     for (int iIdx = 0; iIdx < node.children.Length; iIdx ++)
+//     {
+//         node.children.GetString(iIdx, szConfigName, sizeof(szConfigName));
 
-        g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle));
+//         g_smConfigInfo.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle));
 
-        menu.AddItem(szConfigName, szConfigTitle);
-    }
+//         menu.AddItem(szConfigName, szConfigTitle);
+//     }
 
-    menu.Display(iClient, -1);
-}
+//     menu.Display(iClient, -1);
+// }
 
-public int HandlerCategoryMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
-{
-    switch(hAction)
-    {
-        case MenuAction_End: delete menu;
+// public int HandlerCategoryMenu(Menu menu, MenuAction hAction, int iClient, int iItem)
+// {
+//     switch (hAction)
+//     {
+//         case MenuAction_End: delete menu;
 
-        case MenuAction_Select:
-        {
-            char szTargetConfig[MAX_CONFIG_NAME_LENGTH];
-            menu.GetItem(iItem, szTargetConfig, sizeof(szTargetConfig));
+//         case MenuAction_Select:
+//         {
+//             char szTargetConfig[MAX_CONFIG_NAME_LENGTH];
+//             menu.GetItem(iItem, szTargetConfig, sizeof(szTargetConfig));
 
-            RunVote(HandlerVoteMatchStart, iClient, szTargetConfig);
-        }
-    }
+//             RunVote(HandlerVoteMatchStart, iClient, szTargetConfig);
+//         }
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
-NativeVote RunVote(NativeVotes_Handler hHandler, int iInitiator, char[] szTargetConfig = "")
-{
-    if (!NativeVotes_IsNewVoteAllowed())
-    {
-        CPrintToChat(iInitiator, "%T%T", "TAG", iInitiator, "VOTE_COULDOWN", iInitiator, NativeVotes_CheckVoteDelay());
-        return null;
-    }
+// NativeVote RunVote(NativeVotes_Handler hHandler, int iInitiator, char[] szTargetConfig = "")
+// {
+//     if (!NativeVotes_IsNewVoteAllowed())
+//     {
+//         CPrintToChat(iInitiator, "%T%T", "TAG", iInitiator, "VOTE_COULDOWN", iInitiator, NativeVotes_CheckVoteDelay());
+//         return null;
+//     }
 
-    strcopy(g_szTargetConfig, sizeof(g_szTargetConfig), szTargetConfig);
+//     strcopy(g_szTargetConfig, sizeof(g_szTargetConfig), szTargetConfig);
 
-    int iTotalPlayers = 0;
-    int[] iPlayers = new int[MaxClients];
+//     int iTotalPlayers = 0;
+//     int[] iPlayers = new int[MaxClients];
 
-    for (int iPlayer = 1; iPlayer <= MaxClients; iPlayer ++)
-    {
-        if (!IsClientInGame(iPlayer) || IsFakeClient(iPlayer) || IsClientSpectator(iPlayer)) {
-            continue;
-        }
+//     for (int iPlayer = 1; iPlayer <= MaxClients; iPlayer ++)
+//     {
+//         if (!IsClientInGame(iPlayer) || IsFakeClient(iPlayer) || IsClientSpectator(iPlayer)) {
+//             continue;
+//         }
 
-        iPlayers[iTotalPlayers++] = iPlayer;
-    }
+//         iPlayers[iTotalPlayers++] = iPlayer;
+//     }
 
-    NativeVote hVote = new NativeVote(hHandler, NativeVotesType_Custom_YesNo);
-    hVote.Initiator = iInitiator;
+//     NativeVote hVote = new NativeVote(hHandler, NativeVotesType_Custom_YesNo);
+//     hVote.Initiator = iInitiator;
 
-    hVote.DisplayVote(iPlayers, iTotalPlayers, VOTE_TIME);
+//     hVote.DisplayVote(iPlayers, iTotalPlayers, VOTE_TIME);
 
-    return hVote;
-}
+//     return hVote;
+// }
 
 /**
  * Called when a vote action is completed.
@@ -304,48 +523,46 @@ NativeVote RunVote(NativeVotes_Handler hHandler, int iInitiator, char[] szTarget
  * @param iParam1           First action parameter.
  * @param iParam2           Second action parameter.
  */
-Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, int iParam2)
-{
-    switch (tAction)
-    {
-        case VoteAction_Display:
-        {
-            char szConfigTitle[MAX_CONFIG_TITLE_LENGTH], sVoteDisplayMessage[128];
+// Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, int iParam2)
+// {
+//     switch (tAction)
+//     {
+//         case VoteAction_Display:
+//         {
+//             char szConfigTitle[MAX_CONFIG_TITLE_LENGTH], sVoteDisplayMessage[128];
 
-            g_smConfigsByNames.GetString(g_szTargetConfig, szConfigTitle, sizeof(szConfigTitle));
+//             g_smConfigInfo.GetString(g_szTargetConfig, szConfigTitle, sizeof(szConfigTitle));
 
-            FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_START", iParam1, szConfigTitle);
+//             FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_START", iParam1, szConfigTitle);
 
-            hVote.SetDetails(sVoteDisplayMessage);
+//             hVote.SetDetails(sVoteDisplayMessage);
 
-            return Plugin_Changed;
-        }
+//             return Plugin_Changed;
+//         }
 
-        case VoteAction_Cancel: {
-            hVote.DisplayFail();
-        }
+//         case VoteAction_Cancel: hVote.DisplayFail();
 
-        case VoteAction_Finish:
-        {
-            if (iParam1 == NATIVEVOTES_VOTE_NO)
-            {
-                g_szTargetConfig[0] = '\0';
-                hVote.DisplayFail();
+//         case VoteAction_Finish:
+//         {
+//             if (iParam1 == NATIVEVOTES_VOTE_NO)
+//             {
+//                 g_szTargetConfig[0] = '\0';
+//                 hVote.DisplayFail();
 
-                return Plugin_Continue;
-            }
+//                 return Plugin_Continue;
+//             }
 
-            ConfigManager_LoadConfig(g_szTargetConfig);
-            g_szTargetConfig[0] = '\0';
+//             ConfigManager_LoadConfig(g_szTargetConfig);
+//             g_szTargetConfig[0] = '\0';
 
-            hVote.DisplayPass();
-        }
+//             hVote.DisplayPass();
+//         }
 
-        case VoteAction_End: hVote.Close();
-    }
+//         case VoteAction_End: hVote.Close();
+//     }
 
-    return Plugin_Continue;
-}
+//     return Plugin_Continue;
+// }
 
 /**
  * Called when a vote action is completed.
@@ -355,51 +572,49 @@ Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, 
  * @param iParam1           First action parameter.
  * @param iParam2           Second action parameter.
  */
-Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, int iParam2)
-{
-    switch (tAction)
-    {
-        case VoteAction_Display:
-        {
-            char sVoteDisplayMessage[128];
+// Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, int iParam2)
+// {
+//     switch (tAction)
+//     {
+//         case VoteAction_Display:
+//         {
+//             char sVoteDisplayMessage[128];
 
-            char szConfigName[MAX_CONFIG_NAME_LENGTH], szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
-            ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
+//             char szConfigName[MAX_CONFIG_NAME_LENGTH], szConfigTitle[MAX_CONFIG_TITLE_LENGTH];
+//             ConfigManager_GetConfigName(szConfigName, sizeof(szConfigName));
 
-            if (!g_smConfigsByNames.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
-                FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iParam1);
-            }
+//             if (!g_smConfigInfo.GetString(szConfigName, szConfigTitle, sizeof(szConfigTitle))) {
+//                 FormatEx(szConfigTitle, sizeof(szConfigTitle), "%T", "CONFIG_UNDEFINED", iParam1);
+//             }
 
-            FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_END", iParam1, szConfigTitle);
+//             FormatEx(sVoteDisplayMessage, sizeof(sVoteDisplayMessage), "%T", "VOTE_MATCH_END", iParam1, szConfigTitle);
 
-            hVote.SetDetails(sVoteDisplayMessage);
+//             hVote.SetDetails(sVoteDisplayMessage);
 
-            return Plugin_Changed;
-        }
+//             return Plugin_Changed;
+//         }
 
-        case VoteAction_Cancel: {
-            hVote.DisplayFail();
-        }
+//         case VoteAction_Cancel: hVote.DisplayFail();
 
-        case VoteAction_Finish:
-        {
-            if (iParam1 == NATIVEVOTES_VOTE_NO)
-            {
-                hVote.DisplayFail();
+//         case VoteAction_Finish:
+//         {
+//             if (iParam1 == NATIVEVOTES_VOTE_NO)
+//             {
+//                 hVote.DisplayFail();
 
-                return Plugin_Continue;
-            }
+//                 return Plugin_Continue;
+//             }
 
-            hVote.DisplayPass();
+//             hVote.DisplayPass();
 
-            ConfigManager_UnloadConfig();
-        }
+//             ConfigManager_UnloadConfig();
+//         }
 
-        case VoteAction_End: hVote.Close();
-    }
+//         case VoteAction_End: hVote.Close();
+//     }
 
-    return Plugin_Continue;
-}
+//     return Plugin_Continue;
+// }
 
 /**
  *
