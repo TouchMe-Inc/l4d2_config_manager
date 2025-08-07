@@ -233,7 +233,7 @@ void SimplifyNodeTo(ArrayList result, const NodeItem src)
  *   1) A configuration path is built using ConfigManager_BuildConfigPath().
  *   2) "/info.txt" is appended to the path.
  *   3) KeyValues are imported from the file.
- *   4) Fields "name", "alias", and "version" are extracted into a ConfigInfo struct.
+ *   4) Fields "name", "alias", "version", "author" are extracted into a ConfigInfo struct.
  *   5) The struct is stored in the provided StringMap using node.value as the key.
  *
  * @param StringMap smConfigInfo
@@ -312,13 +312,12 @@ ArrayList BuildHierarchy(Handle hKv)
         return nodes; // пустой список, если нет потомков
     }
 
+    char keyName[32], keyValue[128];
+
     do
     {
         // 1) Считываем имя и значение
-        char keyName[32];
         KvGetSectionName(hKv, keyName, sizeof(keyName));
-
-        char keyValue[128];
         KvGetString(hKv, NULL_STRING, keyValue, sizeof(keyValue));
 
         // 2) Создаём «узел» и кладём name/value
