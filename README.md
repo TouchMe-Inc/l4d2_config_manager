@@ -4,12 +4,12 @@ The plugin allows you to run configs located in the `configs/config_manager` fol
 > [!IMPORTANT]
 > The plugin only provides API
 
-## Commands (config only)
+### Commands (config only)
 * `config_manager_addcvar <cvar> <value>` - set and lock convar value.
 * `config_manager_deletecvar <cvar>` - unlock and return original value.
 * `config_manager_resetcvars` - unlock and return original value for all convars.
 
-## Config struct
+### Config struct
 * `configs/config_manager/<config_path>/config_load.cfg` - Commands executed by the server when running the config.
 * `configs/config_manager/<config_path>/config_unload.cfg` - Commands executed by the server when 
 
@@ -19,12 +19,12 @@ The plugin allows you to run configs located in the `configs/config_manager` fol
 # About cm_match
 The plugin provides a menu for creating votes for changing the config.
 
-## Commands
+### Commands
 * `!match` - Show menu with configs.
 * `!match <alias>` - Load config by alias.
 * `!rmatch` - Unload current config.
 
-## Config list
+### Config list
 To add a config you need:
 1. Open `addons/sourcemod/configs/cm_match.txt`;
 2. Create a category;
