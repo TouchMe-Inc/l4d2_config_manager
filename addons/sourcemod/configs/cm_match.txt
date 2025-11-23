@@ -7,12 +7,7 @@
 		{
 			"item"
 			{
-				"name" "versus_t1"
-			}
-
-			"item"
-			{
-				"name" "versus_t2"
+				"name" "example"
 			}
 
 			"category"
@@ -22,7 +17,7 @@
 				{
 					"item"
 					{
-						"name" "versus_t3"
+						"name" "versus_t1"
 					}
 				}
 			}

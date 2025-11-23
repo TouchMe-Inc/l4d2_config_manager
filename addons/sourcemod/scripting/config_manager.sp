@@ -8,18 +8,18 @@
 #define REQUIRE_PLUGIN
 
 
-public Plugin myinfo =
-{
+public Plugin myinfo = {
     name =        "ConfigManager",
     author =      "ConfoglTeam, TouchMe",
     description = "The plugin allows you to run configs located in the \"cfg/config_manager\" folder",
-    version =     "build_0002",
+    version =     "build_0003",
     url =         "https://github.com/TouchMe-Inc/l4d2_config_manager"
 }
 
 
 #define PATH_TO_CFG_RELATIVE    "../../cfg/"
 #define CONFIG_MANAGER_DIR      "config_manager"
+#define CONFIG_PLUGINS          "configs/plugins.txt"
 
 /*
  * Libs.
@@ -30,7 +30,7 @@ public Plugin myinfo =
  * String limit.
  */
 #define MAXLENGTH_MAP_NAME      32
-#define MAXLENGTH_CONFIG_PATH         128
+#define MAXLENGTH_CONFIG_PATH   128
 #define MAXLENGTH_CVAR_NAME     64
 #define MAXLENGTH_CVAR_VALUE    128
 #define MAXLENGTH_PLUGIN_NAME   128
@@ -178,7 +178,8 @@ public void OnPluginStart()
     g_smPluginWhiteList = new StringMap();
     g_smUpdatedConVars = new StringMap();
 
-    GetPluginWhitelist(g_smPluginWhiteList);
+    FillWhiteListByPluginsDir(g_smPluginWhiteList);
+    LoadPluginsFromFile(g_smPluginWhiteList);
 
     RegServerCmd("config_manager_addcvar", Cmd_AddCvar, "config_manager_addcvar <cvar> <value>");
     RegServerCmd("config_manager_deletecvar", Cmd_DeleteCvar, "config_manager_deletecvar <cvar>");
@@ -189,8 +190,8 @@ Action Cmd_AddCvar(int iArgs)
 {
     if (iArgs != 2)
     {
-        char sCmdArgs[128]; GetCmdArgString(sCmdArgs, sizeof(sCmdArgs));
-        LogError("Invalid command \"%s\". Usage: config_manager_addcvar <cvar> <value>", sCmdArgs);
+        char szCmdArgs[128]; GetCmdArgString(szCmdArgs, sizeof(szCmdArgs));
+        LogError("Invalid command \"%s\". Usage: config_manager_addcvar <cvar> <value>", szCmdArgs);
         return Plugin_Handled;
     }
 
@@ -237,8 +238,8 @@ Action Cmd_DeleteCvar(int iArgs)
 {
     if (iArgs != 1)
     {
-        char sCmdArgs[128]; GetCmdArgString(sCmdArgs, sizeof(sCmdArgs));
-        LogError("Invalid command \"%s\". Usage: config_manager_deletecvar <cvar>", sCmdArgs);
+        char szCmdArgs[128]; GetCmdArgString(szCmdArgs, sizeof(szCmdArgs));
+        LogError("Invalid command \"%s\". Usage: config_manager_deletecvar <cvar>", szCmdArgs);
         return Plugin_Handled;
     }
 
@@ -275,7 +276,7 @@ Action Cmd_ResetCvars(int iArgs)
     return Plugin_Handled;
 }
 
-public void OnConVarChanged(ConVar convar, const char[] sOldValue, const char[] sNewValue)
+public void OnConVarChanged(ConVar convar, const char[] szOldValue, const char[] szNewValue)
 {
     if (g_bConVarHookIgnore) {
         return;
@@ -283,7 +284,7 @@ public void OnConVarChanged(ConVar convar, const char[] sOldValue, const char[] 
 
     g_bConVarHookIgnore = true;
 
-    SetConVarStringSilence(convar, sOldValue);
+    SetConVarStringSilence(convar, szOldValue);
 
     g_bConVarHookIgnore = false;
 }
@@ -394,26 +395,26 @@ void ResetConVars()
     delete hSnapshot;
 }
 
-void GetPluginWhitelist(StringMap smPluginWhiteList)
+void FillWhiteListByPluginsDir(StringMap smPluginWhiteList)
 {
-    char sPath[PLATFORM_MAX_PATH];
-    BuildPath(Path_SM, sPath, sizeof(sPath), "plugins");
+    char szPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szPath, sizeof(szPath), "plugins");
 
-    DirectoryListing dir = OpenDirectory(sPath);
+    DirectoryListing dir = OpenDirectory(szPath);
 
     if (dir == null) {
         return;
     }
 
-    char szPluginName[MAXLENGTH_PLUGIN_NAME];
+    char szPluginFilename[MAXLENGTH_PLUGIN_NAME];
     FileType type;
-    while (ReadDirEntry(dir, szPluginName, sizeof(szPluginName), type))
+    while (ReadDirEntry(dir, szPluginFilename, sizeof(szPluginFilename), type))
     {
         if (type != FileType_File) {
             continue;
         }
 
-        smPluginWhiteList.SetValue(szPluginName, 1);
+        smPluginWhiteList.SetValue(szPluginFilename, 1);
     }
 
     delete dir;
@@ -425,7 +426,7 @@ void UnloadPlugins(StringMap smPluginWhiteList)
 
     Handle hSelf = GetMyHandle();
 
-    char sPluginFilename[128];
+    char szPluginFilename[MAXLENGTH_PLUGIN_NAME];
 
     while (MorePlugins(it))
     {
@@ -435,11 +436,11 @@ void UnloadPlugins(StringMap smPluginWhiteList)
             continue;
         }
 
-        GetPluginFilename(hPlugin, sPluginFilename, sizeof(sPluginFilename));
+        GetPluginFilename(hPlugin, szPluginFilename, sizeof(szPluginFilename));
 
-        if (!smPluginWhiteList.ContainsKey(sPluginFilename))
+        if (!smPluginWhiteList.ContainsKey(szPluginFilename))
         {
-            ServerCommand("sm plugins unload %s", sPluginFilename);
+            ServerCommand("sm plugins unload %s", szPluginFilename);
             ServerExecute();
         }
     }
@@ -459,6 +460,42 @@ void SetConVarStringSilence(ConVar convar, const char[] sValue)
     SetConVarFlags(convar, iFlags & ~FCVAR_NOTIFY);
     SetConVarString(convar, sValue);
     SetConVarFlags(convar, iFlags);
+}
+
+void LoadPluginsFromFile(StringMap smPluginWhiteList)
+{
+    char szDataPath[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, szDataPath, sizeof(szDataPath), "%s", CONFIG_PLUGINS);
+    File file;
+
+    if (!FileExists(szDataPath))
+    {
+        file = OpenFile(szDataPath, "w");
+        delete file;
+        return;
+    }
+
+    char szLine[PLATFORM_MAX_PATH];
+    file = OpenFile(szDataPath, "r");
+
+    while (!file.EndOfFile())
+    {
+        file.ReadLine(szLine, PLATFORM_MAX_PATH);
+        NormalizePluginFileName(szLine);
+        ServerCommand("sm plugins load %s", szLine);
+        smPluginWhiteList.SetValue(szLine, 1);
+    }
+
+    delete file;
+}
+
+void NormalizePluginFileName(char[] szFilename)
+{
+    TrimString(szFilename);
+
+    if (StrContains(szFilename, ".smx", true) == -1) {
+        StrCat(szFilename, PLATFORM_MAX_PATH, ".smx");
+    }
 }
 
 void RestartMap()
