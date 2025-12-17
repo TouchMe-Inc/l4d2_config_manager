@@ -391,8 +391,7 @@ Action HandlerVoteMatchStart(NativeVote hVote, VoteAction tAction, int iParam1, 
 
             hVote.DisplayPass();
 
-            ConfigManager_LoadConfig(g_szTargetConfig);
-            g_szTargetConfig[0] = '\0';
+            CreateTimer(3.0, Timer_VoteMatchDelay, true, .flags = TIMER_FLAG_NO_MAPCHANGE);
         }
 
         case VoteAction_End: hVote.Close();
@@ -444,14 +443,25 @@ Action HandlerVoteMatchEnd(NativeVote hVote, VoteAction tAction, int iParam1, in
             }
 
             hVote.DisplayPass();
-
-            ConfigManager_UnloadConfig();
+            CreateTimer(3.0, Timer_VoteMatchDelay, false, .flags = TIMER_FLAG_NO_MAPCHANGE);
         }
 
         case VoteAction_End: hVote.Close();
     }
 
     return Plugin_Continue;
+}
+
+Action Timer_VoteMatchDelay(Handle hTimer, bool bIsLoad)
+{
+    if (bIsLoad) {
+        ConfigManager_LoadConfig(g_szTargetConfig);
+        g_szTargetConfig[0] = '\0';
+    } else {
+        ConfigManager_UnloadConfig();
+    }
+
+    return Plugin_Stop;
 }
 
 void BuildMenu(char[] szPath, NodeItem menu)
